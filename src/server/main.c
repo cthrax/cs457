@@ -1,44 +1,82 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
+// IP's lower than 41951 are reserved according to http://en.wikipedia.org/wiki/List_of_TCP_and_UDP_port_numbers
+const int LOWER_IP = 41952;
+const int UPPER_IP = 65535;
+
+void toLower(char* target);
+
 int main(int argc, char **argv) {
-	int aflag = 0;
-	int bflag = 0;
-	char *cvalue = NULL;
+	char* port = NULL;
 	int index;
 	int c;
+	int test = 0;
 
+	// Turn off default error handling for getopt, return '?' instead
 	opterr = 0;
 
-	while ((c = getopt(argc, argv, "abc:")) != -1)
+	if (argc == 1) {
+		fprintf(stderr, "Must specify port and packet type.\n");
+		return 1;
+	}
+
+	while ((c = getopt(argc, argv, "p:t:")) != -1) {
 		switch (c) {
-		case 'x':
-			aflag = 1;
-			break;
-		case 't':
-			//Value ucp or tcp
-			bflag = 1;
-			break;
-		case 'c':
-			cvalue = optarg;
-			break;
-		case '?':
-			if (optopt == 'c')
-				fprintf(stderr, "Option -%c requires an argument.\n", optopt);
-			else if (isprint(optopt))
-				fprintf(stderr, "Unknown option `-%c'.\n", optopt);
-			else
-				fprintf(stderr, "Unknown option character `\\x%x'.\n", optopt);
-			return 1;
-		default:
-			abort();
+			case 'p':
+				test = atoi(optarg);
+				if (test >= LOWER_IP && test <= UPPER_IP) {
+					port = optarg;
+				} else {
+					fprintf(stderr, "Invalid port %d. Must use ephemeral or dynamic port within range of 49152-65535 so as to preven stepping on registered ports.\n", test);
+				}
+				break;
+			case 't':
+				//Value ucp or tcp
+				toLower(optarg);
+
+				if (strcmp(optarg, "udp") == 0) {
+					printf("udp!\n");
+				} else if (strcmp(optarg, "tcp") == 0) {
+					printf("tcp!\n");
+				} else {
+					fprintf(stderr, "Invalid type, must be tcp or udp.");
+				}
+
+				break;
+			case '?':
+				if (optopt == 't') {
+					fprintf(stderr, "Option -%c requires an argument. (tcp | udp)\n", optopt);
+				} else if (optopt == 'p') {
+					fprintf(stderr, "Option -%c requires an argument (-p <port number from 49152-65535>)\n", optopt);
+				} else if (isprint(optopt)) {
+					fprintf(stderr, "Unknown option `-%c'.\n", optopt);
+				} else {
+					fprintf(stderr, "Unknown option character `\\x%x'.\n", optopt);
+				}
+				return 1;
+			default:
+				abort();
 		}
+	}
 
-	printf("aflag = %d, bflag = %d, cvalue = %s\n", aflag, bflag, cvalue);
-
-	for (index = optind; index < argc; index++)
-		printf("Non-option argument %s\n", argv[index]);
+	for (index = optind; index < argc; index++) {
+		printf("Non-option argument %s, ignoring.\n", argv[index]);
+	}
 	return 0;
+}
+
+void toLower(char* target) {
+	int i = 0;
+	for (i = 0; i < 3; i++) {
+		if (target[i] == '\n') {
+			break;
+		}
+		if (isupper(target[i])) {
+			target[i] = tolower(target[i]);
+		}
+	}
 }
