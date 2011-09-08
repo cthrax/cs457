@@ -1,4 +1,5 @@
-#include <netinet/in.h>
-
-void* get_in_addr(struct sockaddr *sa);
+#ifndef UDP_SERVER_H
+#define UDP_SERVER_H
 int start_udp_server(char* port);
+
+#endif

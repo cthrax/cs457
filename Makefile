@@ -1,10 +1,10 @@
 CC=gcc
 CFLAGS=-c -Wall
 LDFLAGS=-I include/a1/
-CLIENT_SOURCES=src/client/main.c
+CLIENT_SOURCES=src/client/main.c src/client/tcp_client.c
 CLIENT_OBJECTS=$(CLIENT_SOURCES:.c=.o)
 CLIENT_EXECUTABLE=proj1_client 
-SERVER_SOURCES=src/server/main.c src/server/udp_server.c
+SERVER_SOURCES=src/server/main.c src/server/udp_server.c src/server/tcp_server.c src/server/server_common.c
 SERVER_OBJECTS=$(SERVER_SOURCES:.c=.o)
 SERVER_EXECUTABLE=proj1_server
 

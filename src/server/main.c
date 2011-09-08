@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include "udp_server.h"
+#include "tcp_server.h"
 
 // IP's lower than 41951 are reserved according to http://en.wikipedia.org/wiki/List_of_TCP_and_UDP_port_numbers
 const int LOWER_IP = 41952;
@@ -76,6 +77,8 @@ int main(int argc, char **argv) {
 
 	if (type == UDP) {
 		retstatus = start_udp_server(port);
+	} else if (type == TCP) {
+		retstatus = start_tcp_server(port);
 	}
 
 	return retstatus;
