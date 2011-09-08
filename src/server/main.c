@@ -4,9 +4,14 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "udp_server.h"
+
 // IP's lower than 41951 are reserved according to http://en.wikipedia.org/wiki/List_of_TCP_and_UDP_port_numbers
 const int LOWER_IP = 41952;
 const int UPPER_IP = 65535;
+
+const int UDP = 1;
+const int TCP = 2;
 
 void toLower(char* target);
 
@@ -15,6 +20,8 @@ int main(int argc, char **argv) {
 	int index;
 	int c;
 	int test = 0;
+	int type = 0;
+	int retstatus = -1;
 
 	// Turn off default error handling for getopt, return '?' instead
 	opterr = 0;
@@ -39,9 +46,9 @@ int main(int argc, char **argv) {
 				toLower(optarg);
 
 				if (strcmp(optarg, "udp") == 0) {
-					printf("udp!\n");
+					type = UDP;
 				} else if (strcmp(optarg, "tcp") == 0) {
-					printf("tcp!\n");
+					type = TCP;
 				} else {
 					fprintf(stderr, "Invalid type, must be tcp or udp.");
 				}
@@ -66,7 +73,12 @@ int main(int argc, char **argv) {
 	for (index = optind; index < argc; index++) {
 		printf("Non-option argument %s, ignoring.\n", argv[index]);
 	}
-	return 0;
+
+	if (type == UDP) {
+		retstatus = start_udp_server(port);
+	}
+
+	return retstatus;
 }
 
 void toLower(char* target) {
