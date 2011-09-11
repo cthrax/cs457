@@ -78,7 +78,8 @@ int start_udp_server(char* port) {
 			fprintf(stderr, "Invalid packet recieved.");
 			continue;
 		} else {
-			printf("The number is: %ud", data->data);
+			printf("The number is: %u\n", data->data);
+			fflush(stdout);
 		}
 
 		reply.version = 1;
