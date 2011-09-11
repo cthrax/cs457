@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <netdb.h>
 
 #include "common.h"
 #include "tcp_client.h"
@@ -57,6 +58,10 @@ int main(int argc, char **argv) {
 				msg = (unsigned int)test;
 				break;
 			case 's':
+				if (gethostbyname(optarg) == NULL) {
+					fprintf(stderr, "Invalid hostname.\n");
+					return 2;
+				}
 				host = optarg;
 				break;
 			case '?':
