@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
 		switch (c) {
 			case 'p':
 				if (parsePortNumber(LOWER_IP, UPPER_IP, optarg) == NULL) {
-					fprintf(stderr, "Invalid port %s. Must use ephemeral or dynamic port within range of 49152-65535 so as to preven stepping on registered ports.\n", optarg);
+					fprintf(stderr, "Invalid port %s. Must use ephemeral or dynamic port within range of 49152-65535 so as to prevent stepping on registered ports.\n", optarg);
 				} else {
 					port = optarg;
 				}

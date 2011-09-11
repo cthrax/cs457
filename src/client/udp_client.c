@@ -49,6 +49,8 @@ int start_udp_client(char* hostname, char* port, unsigned int msg)
     for(p = servinfo; p != NULL; p = p->ai_next) {
         if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
         	//XXX: do we actually need this error message?
+        	//I'm pretty sure we don't. It'll give an error message at the end if we don't end up with a socket.
+        	//The rest is just, essentially, spam.
             //fprintf(stderr, "socket error\n");
             continue;
         }
@@ -60,14 +62,14 @@ int start_udp_client(char* hostname, char* port, unsigned int msg)
         fprintf(stderr, "failed to bind socket\n");
         return 2;
     }
-
-    data.version = 1;
-    data.data = msg;
+    data.version = htons(1);
+    data.data = htonl(msg);
+    //added hton calls. Not sure if the lab is Big or Little Endien.
     if ((numbytes = sendto(sockfd, (void*)&data, sizeof(data), 0, p->ai_addr, p->ai_addrlen)) == -1) {
         fprintf(stderr, "sendto error");
         exit(1);
     } else {
-    	printf("Sent number (%u) to server %s:%s via UDP.\n", msg, hostname, port);
+    	printf("Sent number (%u) and flag(%u) to server %s:%s via UDP.\n", data.data, data.version, hostname, port);
     }
 
     if (numbytes != sizeof(data)) {
@@ -85,19 +87,20 @@ int start_udp_client(char* hostname, char* port, unsigned int msg)
 
 	if (select(sockfd, &socks, NULL, NULL, &t)) {
 		if ((numbytes = recvfrom(sockfd, buf, BUF_SIZE, 0, p->ai_addr, &(p->ai_addrlen))) == -1) {
-			fprintf(stderr, "Error receiving server response.");
+			fprintf(stderr, "Error receiving server response.\n");
 			retval = 4;
 		} else {
 			reply = (struct reply_packet*)buf;
-
-			if(reply->version == 1) {
+			int recevedData = ntohs(reply->version);
+			//Added nTohS incase there's an endien difference. 
+			if(recevedData == 1) {
 				printf("SUCCESS\n");
 			} else {
-				fprintf(stderr, "Invalid response received from server.");
+				fprintf(stderr, "Invalid response received from server.\n");
 			}
 		}
 	} else {
-		fprintf(stderr, "Server didn't respond in a reasonable time.");
+		fprintf(stderr, "Server didn't respond in a reasonable time.\n");
 		retval = 5;
 	}
 

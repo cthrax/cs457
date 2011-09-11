@@ -8,7 +8,7 @@
 #include "common.h"
 
 // IP's lower than 41951 are reserved according to http://en.wikipedia.org/wiki/List_of_TCP_and_UDP_port_numbers
-const int LOWER_IP = 41952;
+const int LOWER_IP = 41951;
 const int UPPER_IP = 65535;
 
 int main(int argc, char **argv) {

@@ -10,6 +10,7 @@
 #include<sys/socket.h>
 #include<arpa/inet.h>
 
+#include <netinet/in.h>//POSIX hton/ntoh
 #include "tcp_server.h"
 #include "server_common.h"
 
@@ -21,12 +22,19 @@ int start_tcp_server(char* port) {
 	char str[INET6_ADDRSTRLEN];
 	struct sockaddr * ai_addr;
 
+	struct data_packet *dataP;
+	struct reply_packet responce;
+	
+	responce.version = htons(1);
+
 	struct sockaddr_storage new_addr; // new socket from 'accept() call' details stored in new_addr
 	int newsockfd;
 	socklen_t new_size;
 
 	int num_bytes;
-	char buff[5];
+	void* buf;
+	
+	buf = malloc(sizeof(struct data_packet));
 
 	memset(&serverside,0,sizeof serverside);
 	serverside.ai_family = AF_INET6;
@@ -99,14 +107,26 @@ int start_tcp_server(char* port) {
 
 		printf("Server got connection from %s\n\n", str);
 
-		if ((num_bytes = recv(newsockfd, buff, sizeof buff, 0)) == -1) {
+		if ((num_bytes = recv(newsockfd, buf, sizeof (struct data_packet), 0)) == -1) {
 
 			fprintf(stderr, "Recv Error..\n\n");
 			printf("num bytes recieved: %d\n", num_bytes);
 		}
-
-		printf("Server recieved %s , i.e. %d bytes from IP: %s\n\n", buff,
+		dataP = (struct data_packet*) buf;
+		dataP->data = ntohl(dataP->data);
+		dataP->version = ntohs(dataP->version);
+		printf("Server recieved %u with flag %u , i.e. %d bytes from IP: %s\n\n", dataP->data, dataP->version,
 				num_bytes, str);
+		//send responce:
+		if(dataP->version == 1){
+			if((num_bytes = send(newsockfd, (void*)&responce, sizeof(responce), 0)) < 0)
+			{
+				printf("Error sending responce!\n");
+				return 2;
+			}
+		}
+		else
+			printf("Error: recieved bad packet!\n");
 
 	}
 
