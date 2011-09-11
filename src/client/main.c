@@ -4,57 +4,70 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "common.h"
+#include "tcp_client.h"
+#include "udp_client.h"
+#include "a1types.h"
+
 // The client should not be restricted in port range because the server could be on any port it wants (technically).
 const int LOWER_IP = 1;
 const int UPPER_IP = 65535;
-void toLower(char* target);
 
 int main(int argc, char **argv) {
 	char* port = NULL;
+	char* host = NULL;
 	int index;
 	int c;
-	int test = 0;
+	int test;
+	unsigned int msg = 0;
+	packet_type type = INVALID_PACKET_TYPE;
+
 
 	opterr = 0;
 
 	if (argc == 1) {
-		fprintf(stderr, "Must specify port and packet type.\n");
+		fprintf(stderr, "Must specify port, packet type, server, and data\n");
 		return 1;
 	}
 
-	while ((c = getopt(argc, argv, "p:t:x:h:")) != -1) {
+	while ((c = getopt(argc, argv, "p:t:x:s:")) != -1) {
 		switch (c) {
 			case 'p':
-				test = atoi(optarg);
-				if (test >= LOWER_IP && test <= UPPER_IP) {
-					port = optarg;
+				if (parsePortNumber(LOWER_IP, UPPER_IP, optarg) == NULL) {
+					fprintf(stderr, "Invalid port %s. Must use ephemeral or dynamic port within range of 49152-65535 so as to preven stepping on registered ports.\n", optarg);
 				} else {
-					fprintf(stderr, "Invalid port %d. Must use ephemeral or dynamic port within range of 49152-65535 so as to preven stepping on registered ports.\n", test);
+					port = optarg;
 				}
 				break;
 			case 't':
 				//Value ucp or tcp
-				toLower(optarg);
-
-				if (strcmp(optarg, "udp") == 0) {
-					printf("udp!\n");
-				} else if (strcmp(optarg, "tcp") == 0) {
-					printf("tcp!\n");
-				} else {
-					fprintf(stderr, "Invalid type, must be tcp or udp.");
-				}
-
+				type = parsePacketType(optarg);
 				break;
 			case 'x':
 				// Data to send
+				test = atoi(optarg);
+
+				if ((*optarg != '0' && test == 0) ||
+				    //(test == INT_MAX || test == INT_MIN) || Need to find these consts
+				    (test < 0)) {
+
+					fprintf(stderr, "Invalid data. Data must be a positive 32 bit integer.");
+					return 1;
+				}
+				msg = (unsigned int)test;
 				break;
-			case 'h':
+			case 's':
+				host = optarg;
 				break;
 			case '?':
 				if (optopt == 't') {
 					fprintf(stderr, "Option -%c requires an argument. (tcp | udp)\n", optopt);
 				} else if (optopt == 'p') {
-					fprintf(stderr, "Option -%c requires an argument (-p <port number from 49152-65535>)\n", optopt);
+					fprintf(stderr, "Option -%c requires an argument (-p <port number from 1-65535>)\n", optopt);
+				} else if (optopt == 's') {
+					fprintf(stderr, "Option -%c requires an argument (-s <valid hostname>)\n", optopt);
+				} else if (optopt == 'x') {
+					fprintf(stderr, "Option -%c requires an argument (-x <some positive 32 bit int>)\n", optopt);
 				} else if (isprint(optopt)) {
 					fprintf(stderr, "Unknown option `-%c'.\n", optopt);
 				} else {
@@ -69,17 +82,13 @@ int main(int argc, char **argv) {
 	for (index = optind; index < argc; index++) {
 		printf("Non-option argument %s, ignoring.\n", argv[index]);
 	}
-	return 0;
-}
 
-void toLower(char* target) {
-	int i = 0;
-	for (i = 0; i < 3; i++) {
-		if (target[i] == '\n') {
-			break;
-		}
-		if (isupper(target[i])) {
-			target[i] = tolower(target[i]);
-		}
+	if (type == UDP) {
+		start_udp_client(host, port, msg);
+	} else if (type == TCP) {
+		start_tcp_client(host, port, msg);
+	} else {
+		fprintf(stderr, "Invalid packet type, must be tcp or udp.");
 	}
+	return 0;
 }

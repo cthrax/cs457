@@ -11,6 +11,7 @@
 #include<arpa/inet.h>
 
 #include "tcp_server.h"
+#include "server_common.h"
 
 int start_tcp_server(char* port) {
 

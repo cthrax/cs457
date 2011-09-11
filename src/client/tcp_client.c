@@ -12,7 +12,7 @@
 #include<sys/socket.h>
 #include<arpa/inet.h>
 
-int start_tcp_client(char* service, char* hostname) {
+int start_tcp_client(char* hostname, char* port, unsigned int data) {
 
 	//TODO: Do we need the newfd?
 	int sockfd, newfd;
@@ -29,10 +29,8 @@ int start_tcp_client(char* service, char* hostname) {
 	//p=&hints;
 
 
-	if ((rv = getaddrinfo(hostname, service, &hints, &servinfo)) != 0) {
-
-		perror("Getaddrinfo Error..\n\n");
-		//exit(1);
+	if ((rv = getaddrinfo(hostname, port, &hints, &servinfo)) != 0) {
+		fprintf(stderr, "Getaddrinfo Error.. check hostname.\n\n");
 	}
 
 	for (p = servinfo; p != NULL; p = p->ai_next) {
@@ -40,14 +38,13 @@ int start_tcp_client(char* service, char* hostname) {
 		if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol))
 				== -1) {
 
-			perror("Socket Error..\n\n");
+			fprintf(stderr, "Socket Error..\n\n");
 			continue;
 		}
 
 		if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
-
 			close(sockfd);
-			perror("Connect Error..\n\n");
+			fprintf(stderr, "Connect Error..\n\n");
 			continue;
 
 		}
@@ -57,13 +54,11 @@ int start_tcp_client(char* service, char* hostname) {
 
 
 	if (p == NULL) {
-
-		perror("Failed to Connect..\n\n");
+		fprintf(stderr,"Failed to Connect..\n\n");
 		exit(1);
 	}
 
-	inet_ntop(p->ai_family,
-			&(((struct sockaddr_in6 *) (p->ai_addr))->sin6_addr), s, sizeof s);
+	inet_ntop(p->ai_family, &(((struct sockaddr_in6 *) (p->ai_addr))->sin6_addr), s, sizeof s);
 
 	printf("Client connected to IP: %s\n\n", s);
 

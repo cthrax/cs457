@@ -1,27 +1,21 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
 
 #include "udp_server.h"
 #include "tcp_server.h"
+#include "common.h"
 
 // IP's lower than 41951 are reserved according to http://en.wikipedia.org/wiki/List_of_TCP_and_UDP_port_numbers
 const int LOWER_IP = 41952;
 const int UPPER_IP = 65535;
 
-const int UDP = 1;
-const int TCP = 2;
-
-void toLower(char* target);
-
 int main(int argc, char **argv) {
 	char* port = NULL;
 	int index;
 	int c;
-	int test = 0;
-	int type = 0;
+	packet_type type = INVALID_PACKET_TYPE;
 	int retstatus = -1;
 
 	// Turn off default error handling for getopt, return '?' instead
@@ -35,25 +29,15 @@ int main(int argc, char **argv) {
 	while ((c = getopt(argc, argv, "p:t:")) != -1) {
 		switch (c) {
 			case 'p':
-				test = atoi(optarg);
-				if (test >= LOWER_IP && test <= UPPER_IP) {
-					port = optarg;
+				if (parsePortNumber(LOWER_IP, UPPER_IP, optarg) == NULL) {
+					fprintf(stderr, "Invalid port %s. Must use ephemeral or dynamic port within range of 49152-65535 so as to preven stepping on registered ports.\n", optarg);
 				} else {
-					fprintf(stderr, "Invalid port %d. Must use ephemeral or dynamic port within range of 49152-65535 so as to preven stepping on registered ports.\n", test);
+					port = optarg;
 				}
 				break;
 			case 't':
 				//Value ucp or tcp
-				toLower(optarg);
-
-				if (strcmp(optarg, "udp") == 0) {
-					type = UDP;
-				} else if (strcmp(optarg, "tcp") == 0) {
-					type = TCP;
-				} else {
-					fprintf(stderr, "Invalid type, must be tcp or udp.");
-				}
-
+				type = parsePacketType(optarg);
 				break;
 			case '?':
 				if (optopt == 't') {
@@ -79,19 +63,10 @@ int main(int argc, char **argv) {
 		retstatus = start_udp_server(port);
 	} else if (type == TCP) {
 		retstatus = start_tcp_server(port);
+	} else {
+		retstatus = 2;
+		fprintf(stderr, "Invalid type, must be tcp or udp.");
 	}
 
 	return retstatus;
-}
-
-void toLower(char* target) {
-	int i = 0;
-	for (i = 0; i < 3; i++) {
-		if (target[i] == '\n') {
-			break;
-		}
-		if (isupper(target[i])) {
-			target[i] = tolower(target[i]);
-		}
-	}
 }

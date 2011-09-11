@@ -11,7 +11,6 @@
 
 #include "udp_server.h"
 #include "server_common.h"
-#define MAXBUFLEN 100
 
 int start_udp_server(char* port) {
     int sockfd;
@@ -19,10 +18,18 @@ int start_udp_server(char* port) {
     int rv;
     int numbytes;
     struct sockaddr_storage their_addr;
-    char buf[MAXBUFLEN];
+    void *buf;
     socklen_t addr_len;
-    char s[INET6_ADDRSTRLEN];
     int retstatus = 0;
+    struct data_packet *data;
+    struct reply_packet reply;
+
+    buf = malloc(sizeof(struct data_packet));
+
+    if (buf == NULL) {
+    	fprintf(stderr, "Unable to allocate buffer for request.");
+    	return 1;
+    }
 
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC; // set to AF_INET to force IPv4
@@ -59,13 +66,26 @@ int start_udp_server(char* port) {
 
     while (1 && retstatus == 0) {
 		addr_len = sizeof their_addr;
-		if ((numbytes = recvfrom(sockfd, buf, MAXBUFLEN-1 , 0, (struct sockaddr *)&their_addr, &addr_len)) == -1) {
+		if ((numbytes = recvfrom(sockfd, buf, sizeof(struct data_packet), 0, (struct sockaddr *)&their_addr, &addr_len)) == -1) {
 			fprintf(stderr, "recvfrom failed.");
 			retstatus = 1;
 			break;
 		}
 
-		buf[numbytes] = '\0';
+		data = (struct data_packet*)buf;
+
+		if (data->version != 1) {
+			fprintf(stderr, "Invalid packet recieved.");
+			continue;
+		} else {
+			printf("The number is: %ud", data->data);
+		}
+
+		reply.version = 1;
+		if ((numbytes = sendto(sockfd, (void*)&reply, sizeof(reply), 0, (struct sockaddr *)&their_addr, addr_len)) == -1) {
+			fprintf(stderr, "Unable to send reply.");
+		}
+
 		retstatus = 0;
     }
 
