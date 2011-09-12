@@ -12,6 +12,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <inttypes.h>
 
 #include "udp_client.h"
 #include "a1types.h"
@@ -62,7 +63,8 @@ int start_udp_client(char* hostname, char* port, unsigned int msg)
         fprintf(stderr, "failed to bind socket\n");
         return 2;
     }
-    data.version = htons(1);
+
+    data.version = (version)1;
     data.data = htonl(msg);
     //added hton calls. Not sure if the lab is Big or Little Endien.
     if ((numbytes = sendto(sockfd, (void*)&data, sizeof(data), 0, p->ai_addr, p->ai_addrlen)) == -1) {

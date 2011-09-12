@@ -7,8 +7,8 @@
 #include "tcp_server.h"
 #include "common.h"
 
-// IP's lower than 41951 are reserved according to http://en.wikipedia.org/wiki/List_of_TCP_and_UDP_port_numbers
-const int LOWER_IP = 41951;
+// IP's lower than 41952 are reserved according to http://en.wikipedia.org/wiki/List_of_TCP_and_UDP_port_numbers
+const int LOWER_IP = 41952;
 const int UPPER_IP = 65535;
 
 int main(int argc, char **argv) {
@@ -31,6 +31,7 @@ int main(int argc, char **argv) {
 			case 'p':
 				if (parsePortNumber(LOWER_IP, UPPER_IP, optarg) == NULL) {
 					fprintf(stderr, "Invalid port %s. Must use ephemeral or dynamic port within range of 49152-65535 so as to preven stepping on registered ports.\n", optarg);
+					return 1;
 				} else {
 					port = optarg;
 				}

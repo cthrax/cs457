@@ -7,7 +7,7 @@
 #define TCP 2
 #define INVALID_PACKET_TYPE 3
 
-typedef uint16_t version;
+typedef uint8_t version;
 typedef uint32_t data;
 //Changed to the uintxx_t for use of hton(s/l) which is required for the project
 typedef unsigned int packet_type;//We shouldn't have this in any of the packets as it could break compatibility with other groups server.

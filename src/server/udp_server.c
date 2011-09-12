@@ -74,18 +74,19 @@ int start_udp_server(char* port) {
 		}
 
 		data = (struct data_packet*)buf;
-		int tempo = ntohs(data->version);
-		data->version = tempo;
+		data->data = ntohl(data->data);
+
 		if (data->version != 1) {
-			fprintf(stderr, "Invalid packet recieved.%u\n", data->version);
+			fprintf(stderr, "Invalid packet received %u\n", data->version);
 			printf("the number is: %u\n", data->data);
 			continue;
 		} else {
-			printf("The number is: %u\n", ntohl(data->data));
+			printf("The number is: %u\n", data->data);
 			fflush(stdout);
 		}
 
-		reply.version = htons(1);
+		//Endianess for our purposes only cares about byteorder, not bit order, so one byte is safe.
+		reply.version = (version)1;
 		if ((numbytes = sendto(sockfd, (void*)&reply, sizeof(reply), 0, (struct sockaddr *)&their_addr, addr_len)) == -1) {
 			fprintf(stderr, "Unable to send reply.");
 		}
