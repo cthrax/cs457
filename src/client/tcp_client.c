@@ -48,11 +48,12 @@ int start_tcp_client(char* hostname, char* port, unsigned int data) {
 		}
 		break;
 	} // end of for loop
+
 	if ((rv = connect(sockfd, p->ai_addr, p->ai_addrlen)) < 0) {//several less-than-zero error codes...
 	    //should we add a time-out condition? otherwise this'll sit here forever until a server accepts.
 		//no, connect is non-blocking and either succeeds or fails, according to man page.
 		close(sockfd);
-		fprintf(stderr, "Connect Error: %s\n\n", gai_strerror(rv));
+		fprintf(stderr, "Connect Error (Is server there?): %s\n\n", gai_strerror(rv));
 		return 2;//continue;
 	}
 
@@ -80,17 +81,17 @@ int start_tcp_client(char* hostname, char* port, unsigned int data) {
 	}
 
 	freeaddrinfo(servinfo);
-	//Setup wait time:
-	struct timeval  timer;
-	timer.tv_sec  = 3;
-	timer.tv_usec = 0;
-	if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timer, sizeof(timer)) < 0) {
-		printf("Error: Timeout before getting a responce\n");
+    //Setup for client timeout
+	struct timeval  t;
+	t.tv_sec  = 3;
+	t.tv_usec = 0;
+	if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &t, sizeof(t)) < 0) {
+		fprintf(stderr, "Error setting timeout condition.\n");
 		return 8;
 	}
 
 	if ((num_bytes = recv(sockfd, buf, sizeof(struct reply_packet), 0)) == -1) {
-		printf("Error: Recieve failed to get the packet\n");
+		fprintf(stderr, "Server didn't respond in a reasonable time or there was an error with the socket.\n");
 		return 9;
 	}
 

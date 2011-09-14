@@ -80,30 +80,26 @@ int start_udp_client(char* hostname, char* port, unsigned int msg)
     }
 
     //Setup for client timeout
-    fd_set socks;
-	struct timeval t;
-	FD_ZERO(&socks);
-	FD_SET(sockfd, &socks);
-	t.tv_sec = 3;
-	// end setup
+	struct timeval  t;
+	t.tv_sec  = 3;
+	t.tv_usec = 0;
+	if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &t, sizeof(t)) < 0) {
+		fprintf(stderr, "Error setting timeout condition.\n");
+		return 8;
+	}
 
-	if (select(sockfd, &socks, NULL, NULL, &t)) {
-		if ((numbytes = recvfrom(sockfd, buf, BUF_SIZE, 0, p->ai_addr, &(p->ai_addrlen))) == -1) {
-			fprintf(stderr, "Error receiving server response.\n");
-			retval = 4;
-		} else {
-			reply = (struct reply_packet*)buf;
-			int recevedData = ntohs(reply->version);
-			//Added nTohS incase there's an endien difference. 
-			if(recevedData == 1) {
-				printf("SUCCESS\n");
-			} else {
-				fprintf(stderr, "Invalid response received from server.\n");
-			}
-		}
+	if ((numbytes = recvfrom(sockfd, buf, BUF_SIZE, 0, p->ai_addr, &(p->ai_addrlen))) == -1) {
+		fprintf(stderr, "Server didn't respond in a reasonable time or there was an error with the socket.\n");
+		retval = 4;
 	} else {
-		fprintf(stderr, "Server didn't respond in a reasonable time.\n");
-		retval = 5;
+		reply = (struct reply_packet*)buf;
+		int recevedData = reply->version;
+		//Added nTohS incase there's an endien difference.
+		if(recevedData == 1) {
+			printf("SUCCESS\n");
+		} else {
+			fprintf(stderr, "Invalid response received from server.\n");
+		}
 	}
 
     freeaddrinfo(servinfo);
