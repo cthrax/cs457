@@ -43,18 +43,16 @@ int start_tcp_client(char* hostname, char* port, unsigned int data) {
 	for (p = servinfo; p != NULL; p = p->ai_next) {
 		if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) < 0) 
 		{
-			fprintf(stderr, "Socket Error..\n\n");//Do we need this error message? or should we just do 1 big one at the end?
+			fprintf(stderr, "Socket Call Error.\n\n");
 			continue;
 		}
 		break;
 	} // end of for loop
 
 	if ((rv = connect(sockfd, p->ai_addr, p->ai_addrlen)) < 0) {//several less-than-zero error codes...
-	    //should we add a time-out condition? otherwise this'll sit here forever until a server accepts.
-		//no, connect is non-blocking and either succeeds or fails, according to man page.
 		close(sockfd);
-		fprintf(stderr, "Connect Error (Is server there?): %s\n\n", gai_strerror(rv));
-		return 2;//continue;
+		fprintf(stderr, "Connect Error (Is the Server ready?): %s\n\n", gai_strerror(rv));
+		return 2;
 	}
 
 	if (p == NULL) {

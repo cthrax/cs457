@@ -49,10 +49,6 @@ int start_udp_client(char* hostname, char* port, unsigned int msg)
     // loop through all the results and make a socket
     for(p = servinfo; p != NULL; p = p->ai_next) {
         if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
-        	//XXX: do we actually need this error message?
-        	//I'm pretty sure we don't. It'll give an error message at the end if we don't end up with a socket.
-        	//The rest is just, essentially, spam.
-            //fprintf(stderr, "socket error\n");
             continue;
         }
 
@@ -66,7 +62,6 @@ int start_udp_client(char* hostname, char* port, unsigned int msg)
 
     data.version = (version)1;
     data.data = htonl(msg);
-    //added hton calls. Not sure if the lab is Big or Little Endien.
     if ((numbytes = sendto(sockfd, (void*)&data, sizeof(data), 0, p->ai_addr, p->ai_addrlen)) == -1) {
         fprintf(stderr, "sendto error");
         exit(1);
@@ -94,7 +89,6 @@ int start_udp_client(char* hostname, char* port, unsigned int msg)
 	} else {
 		reply = (struct reply_packet*)buf;
 		int recevedData = reply->version;
-		//Added nTohS incase there's an endien difference.
 		if(recevedData == 1) {
 			printf("SUCCESS\n");
 		} else {

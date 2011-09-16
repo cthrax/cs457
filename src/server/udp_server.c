@@ -64,7 +64,7 @@ int start_udp_server(char* port) {
     }
 
     freeaddrinfo(servinfo);
-    printf("Server waiting/listening on port:  %s and IP: ?\n\n", port);
+    printf("Server waiting/listening on port:  %s \n\n", port);
     while (1 && retstatus == 0) {
 		addr_len = sizeof their_addr;
 		if ((numbytes = recvfrom(sockfd, buf, sizeof(struct data_packet), 0, (struct sockaddr *)&their_addr, &addr_len)) == -1) {

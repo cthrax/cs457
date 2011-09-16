@@ -20,7 +20,6 @@ int start_tcp_server(char* port) {
 	struct addrinfo serverside, *serverinfo, *p;
 	int rv;
 	char str[INET_ADDRSTRLEN];
-	//struct sockaddr * ai_addr;
 
 	struct data_packet *dataP;
 	struct reply_packet response;
@@ -67,15 +66,11 @@ int start_tcp_server(char* port) {
 		break;
 	} // for loop ends
 
-	printf("\n\n");
-	printf("Socket Descriptor successful ...\n\n");
-
 	if (p == NULL) {
 
 		fprintf(stderr, "Failed to bind Socket...\n\n");
 		exit(1);
 	}
-	printf("Bind Successful...\n\n");
 
 	freeaddrinfo(serverinfo);
 
