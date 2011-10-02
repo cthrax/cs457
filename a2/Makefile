@@ -7,7 +7,7 @@ clean:
 	rm -f *.o *.pgm $(EXEC)
 
 awget:
-	$(CC) -o $@ src/awget.c
+	$(CC) -o $@ awget.c
 
 ss:
-	$(CC) -o $@ src/ss.c
+	$(CC) -o $@ ss.c
