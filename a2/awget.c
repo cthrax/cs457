@@ -17,29 +17,13 @@
 #if defined(__APPLE__)
 #include <stdio.h>   /* flockfile, getc_unlocked, funlockfile */
 #include <stdlib.h>  /* malloc, realloc */
-
 #include <errno.h>   /* errno */
 #include <unistd.h>  /* ssize_t */
 
 ssize_t getline(char **lineptr, size_t *n, FILE *stream);
 #endif
 
-struct ss_packet {
-    uint8_t version;
-    uint16_t ss_no;
-    uint16_t url_len;
-}__attribute__((__packed__));
-
-// <<IP,Port>> Pair Sturcture
-struct int_tuple {
-    uint32_t ip_addr;
-    uint32_t port_no;
-}__attribute__((__packed__));
-
-//Getting char IP
-struct char_ip {
-    char ch_ip[16];
-}__attribute__((__packed__));
+#include "awget.h"
 
 int main(int argc, char *argv[]) {
     /*struct hostent *h;
@@ -62,34 +46,49 @@ int main(int argc, char *argv[]) {
      char *serverip;*/
 
     int in_opt = 0;
-    char url[128] = "", *chfile;
+    int arg_counter = 1;
+    char* url = NULL;
+    char* chfile = NULL;
 
     //Structure Intialization
     struct ss_packet verss;
 
-    if (argc != 5) {
-        printf(
-                "Enter Correct number of arguments in any order \n  %s -u <URL> -c <chain file> \n",
-                argv[0]);
-        exit(1);
+    // Remove URL
+    for (;arg_counter < argc; arg_counter++) {
+        if (argv[arg_counter][0] == '-') {
+            arg_counter++;
+            continue;
+        } else {
+            url = argv[arg_counter];
+            argc--;
+            while (arg_counter < argc) {
+                argv[arg_counter] = argv[++arg_counter];
+            }
+            break;
+        }
     }
 
     //getopt() function to do SANIY CHECK FOR INPUTS
-    while ((in_opt = getopt(argc, argv, "c:u:")) != -1) {
+    while ((in_opt = getopt(argc, argv, "c:")) != -1) {
         switch (in_opt) {
         case 'c':
             //Getting Chain file Name
             chfile = optarg;
             break;
 
-        case 'u':
-            // Getting URL
-            strcpy(url, optarg);
+        case '?':
+            printf("Optarg: %s", optarg);
             break;
 
         default:
+            printf("Default\n");
             abort();
         }
+    }
+
+    if (optind < argc) {
+        fprintf(stderr, "Invalid arguments found. Format is 'awget <URL> [-c chainfile]'.\n");
+        return -1;
     }
 
     // Reading from Chain file
