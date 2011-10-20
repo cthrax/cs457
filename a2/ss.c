@@ -199,9 +199,9 @@ void *ss_func(void *file_desc)
 		exit(1);
 	}
 	
-	memcpy(&ssp.ss_no, ssbuff+mem_off, sizeof(ssp.ss_no));
-	mem_off+=sizeof(ssp.ss_no);
-	hop = ntohs(ssp.ss_no);
+	memcpy(&ssp.step_count, ssbuff+mem_off, sizeof(ssp.step_count));
+	mem_off+=sizeof(ssp.step_count);
+	hop = ntohs(ssp.step_count);
 //	printf("no.of ss = %d\n", hop);
 	hop--;
 	
@@ -331,8 +331,8 @@ void *ss_func(void *file_desc)
 		mem_2off+=sizeof(ssp.version);
 	
 		hop = htons(hop);
-		memcpy(sendbuff+mem_2off, &hop, sizeof(ssp.ss_no));
-		mem_2off+=sizeof(ssp.ss_no);
+		memcpy(sendbuff+mem_2off, &hop, sizeof(ssp.step_count));
+		mem_2off+=sizeof(ssp.step_count);
 		hop = ntohs(hop);
 		
 		memcpy(sendbuff+mem_2off, &ssp.url_len, sizeof(ssp.url_len));

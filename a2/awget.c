@@ -20,6 +20,7 @@ ssize_t getline(char **lineptr, size_t *n, FILE *stream);
 #include "awget.h"
 // Default filename, if no filename is found in URL
 const char *DEFAULT_FILENAME = "index.html";
+const char *DEFAULT_CHAINFILE = "chaingang.txt"
 
 int main(int argc, char *argv[]) {
     int in_opt = 0;         // input of getopt
@@ -108,9 +109,12 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    verss.version = htons(4);
-    verss.url_len = strlen(url);
-    printf("URL Length :%d\n", verss.url_len);
+    verss.version = 1;
+    verss.url = url;
+
+    if (chfile != NULL) {
+        chfile = DEFAULT_CHAINFILE;
+    }
 
     // Opening a Chain File pointed
     if ((fp = fopen(chfile, "r")) == NULL) {
@@ -118,70 +122,55 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    line = malloc(line_len);
+    //We limit hops to 256, so three digits is enough.(plus \0)
+    char hops[4];
+    for (i=0; i < 3; i++) {
+        char c = fgetc(fp);
+        hops[i] = c;
+        if (c == '\0') {
+            break;
+        }
+    }
 
-    // Reading no. of hops from chain file
-    if (getline(&line, &line_len, fp) > 0) {
-        tok = strtok(line, "\n");
-        verss.ss_no = atoi(tok);
-    } else {
-        perror("hops getline:");
+    if (hops[i+1] != '\0') {
+        fprintf(stderr, "Invalid chainfile, check number of hops.(longer than 255).\n");
         exit(1);
     }
 
-    if (verss.ss_no == 0) {
-        printf("No.of SS in Chain file is Zero\n");
+    verss.step_count = atoi(hops);
+    if (verss.step_count == 0) {
+        fprintf(stderr, "Invalid chainfile, check number of hops. (atoi)\n");
         exit(1);
     }
 
-    struct char_ip cip[verss.ss_no];
-    struct int_tuple itp[verss.ss_no];
-    struct int_tuple pOnly[verss.ss_no];
+    verss.steps = (struct int_tuple**) malloc(sizeof(struct int_tuple)*verss.step_count);
 
     //  Getting IP,Port Tuple for each SS
     while ((getline(&line, &line_len, fp) > 0)) {
+        struct int_tuple* cur = *(verss.steps + count);
         tok = strtok(line, " ");
-        //		printf("IP : %s\t", tok);
-        strcpy(cip[count].ch_ip, tok);
-        inet_pton(AF_INET, tok, &itp[count].ip_addr);
+        struct in_addr temp;
+        inet_pton(AF_INET, tok, &(temp));
+        cur->ip_addr = htons(temp.s_addr);
+
 
         tok = strtok(NULL, "\n");
-        //		printf("Port : %s\n", tok);
-        itp[count].port_no = atoi(tok);
+        cur->port_no = htons(atoi(tok));
+
         count++;
     }
 
-    if (count == 0) {
-        perror("ip port getline");
+    if (count == 0 || count != verss.step_count) {
+        fprintf(stderr, "Invalid chainfile, hop count doesn't match address acount.\n");
         exit(1);
     }
 
     fclose(fp);
 
-    printf("No.of SS : %d\n", verss.ss_no);
+    printf("No.of SS : %d\n", verss.step_count);
     printf("Request:%s \n", url);
 
-    // htons() of hops, url length
-    hop = verss.ss_no;
-    verss.ss_no = htons(verss.ss_no);
-    verss.url_len = htons(verss.url_len);
-
-    for (i = 0; i < hop; i++) {
-        pOnly[i].port_no = htons(itp[i].port_no);
-    }
-
-    // memcpy data into buffer
-    memcpy(ssbuff, &verss.version, sizeof(verss.version));
-    mem_offset += sizeof(verss.version);
-
-    memcpy(ssbuff+mem_offset, &verss.ss_no, sizeof(verss.ss_no));
-    mem_offset += sizeof(verss.ss_no);
-
-    memcpy(ssbuff+mem_offset, &verss.url_len, sizeof(verss.url_len));
-    mem_offset += sizeof(verss.url_len);
-
-    memcpy(ssbuff+mem_offset, &url, ntohs(verss.url_len));
-    mem_offset += ntohs(verss.url_len);
+    mem_offset = sizeof(struct ss_packet) + (sizeof(int_tuple) * verss.step_count);
 
     // Create a Socket
     if ((cli_sd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -192,12 +181,6 @@ int main(int argc, char *argv[]) {
     // Handling scenario where only one SS is present
     if (hop == 1) {
         printf("\nNext SS is <%s, %d>\n", cip[0].ch_ip, itp[0].port_no);
-
-        memcpy(ssbuff+mem_offset, &itp[0].ip_addr, sizeof(itp[0].ip_addr));
-        mem_offset += sizeof(itp[0].ip_addr);
-
-        memcpy(ssbuff+mem_offset, &itp[0].port_no, sizeof(itp[0].port_no));
-        mem_offset += sizeof(itp[0].port_no);
 
         // Setting the socket to the only SS
         server_sck_addr.sin_family = AF_INET; // to use IPv4

@@ -6,9 +6,10 @@
 // Struct to hold Version, No. of Hops and URL Length
 struct ss_packet
 {
-	uint16_t version;
-	uint16_t ss_no;
-	uint16_t url_len;
+	uint8_t version;
+	uint8_t step_count;
+	char* url;
+	struct int_tuple** steps;
 }__attribute__((__packed__));
 
 // <<IP,Port>> Pair Sturcture
@@ -21,6 +22,6 @@ struct int_tuple
 //Structure to hold IP in dotted quad notation
 struct char_ip
 {
-	char ch_ip[16];
+	char ch_ip[17];
 };
 #endif
