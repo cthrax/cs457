@@ -239,16 +239,10 @@ int main(int argc, char *argv[]) {
         break;
     }
 
-    // Connect to SS using TCP
-    if ((connect(cli_sd, (struct sockaddr *) &server_sck_addr, sizeof(server_sck_addr))) != 0) {
-        perror("Connect");
-        exit(1);
-    }
-
     printf("\nSending data... \n");
 
     // Send Data to SS
-    if ((numbytes = send(cli_sd, ssbuff, mem_offset, 0)) == -1) {
+    if ((numbytes = send(cli_sd, &verss, mem_offset, 0)) == -1) {
         close(cli_sd);
         perror("URL Send");
         exit(1);
