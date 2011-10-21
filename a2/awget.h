@@ -9,7 +9,7 @@ struct ss_packet
 	uint8_t version;
 	uint8_t step_count;
 	char* url;
-	struct int_tuple** steps;
+	struct int_tuple* steps;
 }__attribute__((__packed__));
 
 // <<IP,Port>> Pair Sturcture

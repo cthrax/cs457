@@ -35,7 +35,6 @@ int main(int argc, char *argv[]) {
     char *tok = NULL;       // For tokenising line
 
     int port_no = 0; // Port Number got from chain file
-    int hop;         // Number of SS
 
     char ssbuff[512] = ""; // Buffer to be sent to SS
     int mem_offset = 0;
@@ -66,7 +65,8 @@ int main(int argc, char *argv[]) {
 
     // Socket Creation
     int cli_sd = 0; // Socket descriptor to SS
-    struct sockaddr_in server_sck_addr;
+    int rv = 0;
+    struct addrinfo hints, *server_sck_addr, *p;
     int rand_ss; // to select a random SS
 
     int numbytes; // Sending req. to SS
@@ -123,7 +123,6 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    printf("1\n");
     //We limit hops to 256, so three digits is enough.(plus \0)
     char hops[4];
     for (i=0; i < 3; i++) {
@@ -133,7 +132,6 @@ int main(int argc, char *argv[]) {
             break;
         }
     }
-    printf("2\n");
 
     if (hops[i+1] != '\0') {
         fprintf(stderr, "Invalid chainfile, check number of hops.(longer than 255).\n");
@@ -145,34 +143,23 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Invalid chainfile, check number of hops. (atoi)\n");
         exit(1);
     }
-    printf("3\n");
 
-    verss.steps = (struct int_tuple**) malloc(sizeof(struct int_tuple)*verss.step_count);
-    printf("4\n");
+    verss.steps = (struct int_tuple*) malloc(sizeof(struct int_tuple)*verss.step_count);
 
     //  Getting IP,Port Tuple for each SS
     while ((getline(&line, &line_len, fp) > 0)) {
-        printf("5.%d\n", count);
-        struct int_tuple* cur = *(verss.steps + count);
-        printf("6.%d\n", count);
+        struct int_tuple* cur = (verss.steps + count);
         tok = strtok(line, " ");
-        printf("7.%d\n", count);
         struct sockaddr_in temp;
         inet_pton(AF_INET, tok, &(temp.sin_addr));
-        printf("%d", cur->port_no);
-        printf("8.%d\n", count);
         cur->ip_addr = htonl(temp.sin_addr.s_addr);
-        printf("9.%d\n", count);
 
         tok = strtok(NULL, "\n");
-        printf("10.%d\n", count);
         cur->port_no = htons(atoi(tok));
-        printf("11.%d\n", count);
 
         count++;
     }
 
-    printf("12\n");
     if (count == 0 || count != verss.step_count) {
         fprintf(stderr, "Invalid chainfile, hop count doesn't match address acount.\n");
         exit(1);
@@ -183,10 +170,9 @@ int main(int argc, char *argv[]) {
     printf("No.of SS : %d\n", verss.step_count);
     printf("Request:%s \n", url);
 
-    printf("13\n");
     mem_offset = sizeof(struct ss_packet) + (sizeof(struct int_tuple) * verss.step_count);
     //XXX: remove.
-    printf("Packet size: %d", mem_offset);
+    printf("Packet size: %d\n", mem_offset);
 
     // Create a Socket
     if ((cli_sd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -196,40 +182,61 @@ int main(int argc, char *argv[]) {
 
     printf("chainlist is \n");
 
-    //Limit scope
-    {
-        // picking a random ss from the list
-        srand(time(NULL));
-        rand_ss = rand() % hop;
 
-        struct int_tuple* nextSS;
-        char nextIp[INET_ADDRSTRLEN];
-        uint16_t nextPort = 0;
+    // picking a random ss from the list
+    srand(time(NULL));
+    rand_ss = rand() % verss.step_count;
 
-        // Printing the chainlist
-        for (i = 0; i < hop; i++) {
-            struct int_tuple* cur = *(verss.steps + count);
-            char ip[INET_ADDRSTRLEN];
-            struct in_addr temp;
-            temp.s_addr = cur->ip_addr;
-            uint16_t port = ntohs(cur->port_no);
-            inet_ntop(AF_INET, &(temp), ip, INET_ADDRSTRLEN);
-            printf("<%s, %d>\n", ip, port);
+    struct int_tuple* nextSS;
+    char nextIp[INET_ADDRSTRLEN];
+    uint16_t nextPort = 0;
 
-            if (i == rand_ss) {
-                strcpy(nextIp, ip);
-                nextPort = port;
-                nextSS = cur;
-            }
+    // Printing the chainlist
+    for (i = 0; i < verss.step_count; i++) {
+        struct int_tuple* cur = (verss.steps + i);
+        char ip[INET_ADDRSTRLEN];
+        struct in_addr temp;
+        temp.s_addr = ntohl(cur->ip_addr);
+        uint16_t port = ntohs(cur->port_no);
+        inet_ntop(AF_INET, &(temp), ip, INET_ADDRSTRLEN);
+        printf("<%s, %d>\n", ip, port);
 
+        if (i == rand_ss) {
+            strcpy(nextIp, ip);
+            nextPort = port;
+            nextSS = cur;
         }
 
-        printf("\nNext SS is <%s, %d>\n", nextIp, nextPort);
+    }
 
-        // Setting the socket to selected SS
-        server_sck_addr.sin_family = AF_INET; // to use IPv4
-        server_sck_addr.sin_addr.s_addr = ntohs(nextSS->ip_addr); // use selected SS IP
-        server_sck_addr.sin_port = ntohs(nextSS->port_no); // Use selected SS port
+    printf("\nNext SS is <%s, %d>\n", nextIp, nextPort);
+
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+
+    char sPort[6];
+    sprintf(sPort, "%d", nextPort);
+    if ((rv = getaddrinfo(nextIp, sPort, &hints, &server_sck_addr)) != 0) {
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+        return 1;
+    }
+
+    // loop through all the results and connect to the first we can
+    for(p = server_sck_addr; p != NULL; p = p->ai_next) {
+        if ((cli_sd = socket(p->ai_family, p->ai_socktype,
+                p->ai_protocol)) == -1) {
+            perror("client: socket");
+            continue;
+        }
+
+        if (connect(cli_sd, p->ai_addr, p->ai_addrlen) == -1) {
+            close(cli_sd);
+            perror("client: connect");
+            continue;
+        }
+
+        break;
     }
 
     // Connect to SS using TCP
