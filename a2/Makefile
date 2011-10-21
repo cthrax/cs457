@@ -10,4 +10,4 @@ awget:
 	$(CC) -o $@ awget.c
 
 ss:
-	$(CC) -o $@ ss.c
+	$(CC) -o $@ ss.c -lpthread
