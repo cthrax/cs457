@@ -131,7 +131,7 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	// Initialise a thread with id SS
+	// Initialise a thread with id SS //why?
 	pthread_t ss;
 	
    	if (listen(sockfd, 10) == -1)
@@ -174,9 +174,9 @@ void *ss_func(void *file_desc)
 	int *filedesc = (int *) file_desc;
 	int fd = *filedesc;
 
-	char ssbuff[1024]="";
+	char ssbuff[15000]="";//The sending *could* be this large w/ a long chainfile, But it probably won't be.
 	// Read the Input from the Client
-	if (recv(fd, ssbuff, 1024, 0) < 0)
+	if (recv(fd, ssbuff, 15000, 0) < 0)
 	{
 		close(fd);
 		perror("Receive");
@@ -205,12 +205,14 @@ void *ss_func(void *file_desc)
 //	printf("no.of ss = %d\n", hop);
 	hop--;
 	
-	memcpy(&ssp.url_len, ssbuff+mem_off, sizeof(ssp.url_len));
-	mem_off+=sizeof(ssp.url_len);
-	int len = ntohs(ssp.url_len);
+	//memcpy(&ssp.url_len, ssbuff+mem_off, sizeof(ssp.url_len));
+	//memcpy for url_len no longer needed as the url_len variable no longer exists.
+	int len = strlen(ssbuff+mem_off);
+	//mem_off+=sizeof(ssp.url_len);No longer need to increase the offset
+	//int len = ntohs(ssp.url_len);
 //	printf("url_len = %d\n",len);
 	
-	char ss_url[len];
+	char* ss_url= (char*) malloc(len*sizeof(char) + 1);
 	memcpy(&ss_url, ssbuff+mem_off, len);
 	mem_off+=len;
 	ss_url[len] = '\0';
@@ -335,11 +337,12 @@ void *ss_func(void *file_desc)
 		mem_2off+=sizeof(ssp.step_count);
 		hop = ntohs(hop);
 		
-		memcpy(sendbuff+mem_2off, &ssp.url_len, sizeof(ssp.url_len));
-		mem_2off+=sizeof(ssp.url_len);
+		//url_len was removed from the struct.
+		//memcpy(sendbuff+mem_2off, &ssp.url_len, sizeof(ssp.url_len));
+		//mem_2off+=sizeof(ssp.url_len);
 		
-		memcpy(sendbuff+mem_2off, &ss_url, ntohs(ssp.url_len));
-		mem_2off+=ntohs(ssp.url_len);	
+		memcpy(sendbuff+mem_2off, &ss_url, len);//??? why ntohslen?
+		mem_2off+=(len);//was ntohs(len) but that seems odd.	
 	
 		// Check for local IP and Chainlist
 		int count = 0, iFor = 0;
