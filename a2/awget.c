@@ -110,7 +110,9 @@ int main(int argc, char *argv[]) {
     }
 
     verss.version = 1;
-    verss.url = url;
+    //*verss.url = (char*) malloc(sizeof(char) * strlen(url));
+    strcpy(verss.url, url);
+    //verss.url = url;
 
     if (chfile == NULL) {
         chfile = DEFAULT_CHAINFILE;
@@ -155,6 +157,7 @@ int main(int argc, char *argv[]) {
         cur->ip_addr = htonl(temp.sin_addr.s_addr);
 
         tok = strtok(NULL, "\n");
+        printf("port = %s  as int %d as netorder %d\n", tok, atoi(tok), htons(atoi(tok)));//TODO remove
         cur->port_no = htons(atoi(tok));
 
         count++;
@@ -170,7 +173,7 @@ int main(int argc, char *argv[]) {
     printf("No.of SS : %d\n", verss.step_count);
     printf("Request:%s \n", url);
 
-    mem_offset = sizeof(struct ss_packet) + (sizeof(struct int_tuple) * verss.step_count);
+    mem_offset = sizeof(struct ss_packet) + (sizeof(struct int_tuple) * verss.step_count) + 1500;//Added the lengh of the URL
     //XXX: remove.
     printf("Packet size: %d\n", mem_offset);
 

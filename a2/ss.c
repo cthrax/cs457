@@ -166,7 +166,8 @@ void *ss_func(void *file_desc) {
 
     char ssbuff[15000] = "";//The sending *could* be this large w/ a long chainfile, But it probably won't be.
     // Read the Input from the Client
-    if (recv(fd, ssbuff, 15000, 0) < 0) {
+    int siz = recv(fd, ssbuff, 15000, 0);
+    if ( siz < 0) {
         close(fd);
         perror("Receive");
         pthread_exit(NULL);
@@ -176,6 +177,10 @@ void *ss_func(void *file_desc) {
     int mem_off = 0;
     int hop;
     struct ss_packet *ssp = (struct ss_packet*) ssbuff;
+////
+    printf("size got = %d\n", siz);
+    
+////
 
     /* Checking for version */
     if (ssp->version != VERSION) {
@@ -183,19 +188,22 @@ void *ss_func(void *file_desc) {
         close(fd);
         pthread_exit(NULL);
     }
-    printf("first emmecpy!\n");
-
+    printf("first emmecpy!\n");//TODO: remove
+    int len = strlen(ssp->url);
+    printf("len = %d\n", len);
     char *ss_url = ssp->url;
+    printf("decrement stepcount\n");//TODO remove
     ssp->step_count--;
 
     if (ssp->step_count == 0) // Special case -> wget the file from url!
     {
         printf("I'm the getter!\n");
         struct stat st;
-        char file_buff[384] = "";
+        char file_buff[4000];
 
         long int fsize = 0;
         // Download the File
+        fprintf(stderr, "%s\n",ss_url);
         sprintf(file_buff,"wget -q %s",ss_url);
         printf("Request: %s\n", ss_url);
         printf("\nIssuing wget to download the File from URL...\n\n");
@@ -261,24 +269,29 @@ void *ss_func(void *file_desc) {
         }
         printf("\nRelaying File\n");
         close(fd);
+        printf("Finished sending file. Awaiting more connections.\n");
+        pthread_exit(NULL);
     }
 
     // Scenario where there is more than 1 hop left
     else {
 
         // Check for local IP and Chainlist
+	printf( "url is %s\n", ssp->url);
         int count = 0, iFor = 0;
         struct int_tuple *newSsList = (struct int_tuple*) malloc(sizeof(struct int_tuple) * ssp->step_count);
-
-        for (iFor = 0; iFor < ssp->step_count + 1; iFor++) {
-            struct int_tuple *cur = (ssp->steps + iFor);
+	printf(" ss - starting list %d\nMy info: %d, %d\n", ssp->step_count, myip_addr, prt_no);
+        for (iFor = 0; iFor < ssp->step_count+1; iFor++) { 
+            struct int_tuple *cur = (&ssp->steps + iFor);//
+	    printf(" inside for loop: %d with cur = %d and %d \n", iFor, ntohl(cur->ip_addr), ntohs(cur->port_no));
             if (myip_addr != cur->ip_addr && prt_no != cur->port_no) {
-                newSsList[count++] = *cur;
+		printf(" Not equal! ip: %d, port: %d\n", ntohl(cur->ip_addr), ntohs(cur->port_no));
+                newSsList[count++] = *cur;//count?
             }
         }
 
         ssp->steps = newSsList;
-
+        printf(" ss - copied ssp->steps\n");
         printf("chainlist is \n");
 
         int iLoop = 0;
