@@ -169,7 +169,7 @@ void *ss_func(void *file_desc) {
     if (recv(fd, ssbuff, 15000, 0) < 0) {
         close(fd);
         perror("Receive");
-        exit(1);
+        pthread_exit(NULL);
     }
 
     // Code to dememcpy the attributes
@@ -181,12 +181,12 @@ void *ss_func(void *file_desc) {
     if (ssp.version != VERSION) {
         printf("Version Mismatch, Dropping Packet and Exiting.\n");
         close(fd);
-        exit(1);
+        pthread_exit(NULL);
     }
     printf("first emmecpy!\n");
 
     int len = strlen(ssbuff + mem_off);
-    printf("my len is \ %d \n", len);
+    printf("my len is %d \n", len);
     char* ss_url = (char*) malloc(len * sizeof(char) + 1);
     ssp.step_count--;
 
@@ -222,7 +222,7 @@ void *ss_func(void *file_desc) {
         } else {
             printf("File Size Stat\n");
             close(fd);
-            exit(1);
+            pthread_exit(NULL);
         }
 
         char *filebuff;
@@ -232,7 +232,7 @@ void *ss_func(void *file_desc) {
         if ((read(open_fd, filebuff, fsize) <= 0)) {
             close(fd);
             perror("File Read:");
-            exit(1);
+            pthread_exit(NULL);
         }
 
         close(open_fd);
@@ -251,7 +251,7 @@ void *ss_func(void *file_desc) {
         if ((send(fd, size, 10, 0)) == -1) {
             close(fd);
             perror("File Size Send");
-            exit(1);
+            pthread_exit(NULL);
         }
 
         // Sending File Data
@@ -259,7 +259,7 @@ void *ss_func(void *file_desc) {
         if ((bytes = send(fd, filebuff, fsize, 0)) == -1) {
             close(fd);
             perror("Data Send");
-            exit(1);
+            pthread_exit(NULL);
         }
         printf("\nRelaying File\n");
         close(fd);
@@ -267,14 +267,6 @@ void *ss_func(void *file_desc) {
 
     // Scenario where there is more than 1 hop left
     else {
-        // Structure Instanciation
-        struct int_tuple *poip = (int_tuple*) malloc(
-                sizeof(int_tuple *[hop + 1]));
-        struct char_ip* chip = (char_ip*) malloc(sizeof(char_ip *[hop + 1]));
-
-        struct int_tuple *ssip = (struct int_tuple*) malloc(sizeof(struct int_tuple) * ssp.step_count);
-        struct char_ip nxt_ip = (char_ip*) malloc(sizeof(char_ip*[hop]));
-
 
         // Check for local IP and Chainlist
         int count = 0, iFor = 0;
@@ -282,8 +274,8 @@ void *ss_func(void *file_desc) {
 
         for (iFor = 0; iFor < ssp.step_count + 1; iFor++) {
             struct int_tuple *cur = (ssp.steps + iFor);
-            if (myip_addr != cur->ip_addr && prt_no != cur->portno) {
-                (newSsList + count++) = cur;
+            if (myip_addr != cur->ip_addr && prt_no != cur->port_no) {
+                newSsList[count++] = *cur;
             }
         }
 
@@ -302,8 +294,8 @@ void *ss_func(void *file_desc) {
         char nextIp[INET_ADDRSTRLEN];
         uint16_t nextPort = 0;
 
-        for (iLoop = 0; iLoop < hop + 1; iLoop++) {
-            struct int_tuple* cur = (verss.steps + iLoop);
+        for (iLoop = 0; iLoop < ssp.step_count + 1; iLoop++) {
+            struct int_tuple* cur = (ssp.steps + iLoop);
             char ip[INET_ADDRSTRLEN];
             struct in_addr temp;
             temp.s_addr = ntohl(cur->ip_addr);
@@ -311,7 +303,7 @@ void *ss_func(void *file_desc) {
             inet_ntop(AF_INET, &(temp), ip, INET_ADDRSTRLEN);
             printf("<%s, %d>\n", ip, port);
 
-            if (i == rand_ss) {
+            if (iLoop == rand_ss) {
                 strcpy(nextIp, ip);
                 nextPort = port;
                 nextSS = cur;
@@ -323,8 +315,10 @@ void *ss_func(void *file_desc) {
         // Server Address
         struct sockaddr_in ss_sck_addr;
         ss_sck_addr.sin_family = AF_INET; // to use IPv4
-        ss_sck_addr.sin_addr.s_addr = ntohl(nextSS.ip_addr); // use next ss ip
-        ss_sck_addr.sin_port = ntohs(nextSS.port_no); // Use next ss port
+        ss_sck_addr.sin_addr.s_addr = ntohl(nextSS->ip_addr); // use next ss ip
+        ss_sck_addr.sin_port = ntohs(nextSS->port_no); // Use next ss port
+
+	int mem_offset = sizeof(struct ss_packet) + (ssp.step_count * sizeof(struct int_tuple));
 
         int cli_ss = 0;
 
@@ -332,7 +326,7 @@ void *ss_func(void *file_desc) {
         if ((cli_ss = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
             close(fd);
             perror("Next SS Socket");
-            exit(1);
+            pthread_exit(NULL);
         }
 
         // Conenct to next Stepping Stone
@@ -341,15 +335,15 @@ void *ss_func(void *file_desc) {
             close(cli_ss);
             close(fd);
             perror("Next SS Connect");
-            exit(1);
+            pthread_exit(NULL);
         }
 
         // Send Packet to data SS
-        if ((send(cli_ss, sendbuff, mem_2off, 0)) == -1) {
+        if ((send(cli_ss, &ssp, mem_offset, 0)) == -1) {
             close(cli_ss);
             close(fd);
             perror("Next SS Send");
-            exit(1);
+            pthread_exit(NULL);
         }
 
         //recv file size
@@ -361,7 +355,7 @@ void *ss_func(void *file_desc) {
             close(cli_ss);
             close(fd);
             perror("File Size Receive");
-            exit(1);
+            pthread_exit(NULL);
         }
 
         // Send File Size to previous SS/Awget
@@ -369,7 +363,7 @@ void *ss_func(void *file_desc) {
             close(cli_ss);
             close(fd);
             perror("File Size Send:");
-            exit(1);
+            pthread_exit(NULL);
         }
 
         // Hanlde File Size
@@ -385,7 +379,7 @@ void *ss_func(void *file_desc) {
             close(cli_ss);
             close(fd);
             perror("Data Receive");
-            exit(1);
+            pthread_exit(NULL);
         }
 
         close(cli_ss);
@@ -395,7 +389,7 @@ void *ss_func(void *file_desc) {
         if ((send(fd, databuff, filesiz, 0)) == -1) {
             close(fd);
             perror("Data Send:");
-            exit(1);
+            pthread_exit(NULL);
         }
 
         close(fd);
