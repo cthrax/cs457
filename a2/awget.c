@@ -86,7 +86,7 @@ int main(int argc, char *argv[]) {
     int count = 0, i = 0;
 
     //getopt() function to do SANIY CHECK FOR INPUTS
-    while ((in_opt = getopt(argc, argv, "c:u:")) != -1) {
+    while ((in_opt = getopt(argc, argv, "c:")) != -1) {
         switch (in_opt) {
         case 'c':
             //Getting Chain file Name
