@@ -175,22 +175,20 @@ void *ss_func(void *file_desc) {
     // Code to dememcpy the attributes
     int mem_off = 0;
     int hop;
-    struct ss_packet ssp;
+    struct ss_packet *ssp = (struct ss_packet*) ssbuff;
 
     /* Checking for version */
-    if (ssp.version != VERSION) {
+    if (ssp->version != VERSION) {
         printf("Version Mismatch, Dropping Packet and Exiting.\n");
         close(fd);
         pthread_exit(NULL);
     }
     printf("first emmecpy!\n");
 
-    int len = strlen(ssbuff + mem_off);
-    printf("my len is %d \n", len);
-    char* ss_url = (char*) malloc(len * sizeof(char) + 1);
-    ssp.step_count--;
+    char *ss_url = ssp->url;
+    ssp->step_count--;
 
-    if (ssp.step_count == 0) // Special case -> wget the file from url!
+    if (ssp->step_count == 0) // Special case -> wget the file from url!
     {
         printf("I'm the getter!\n");
         struct stat st;
@@ -270,16 +268,16 @@ void *ss_func(void *file_desc) {
 
         // Check for local IP and Chainlist
         int count = 0, iFor = 0;
-        struct int_tuple *newSsList = (struct int_tuple*) malloc(sizeof(struct int_tuple) * ssp.step_count);
+        struct int_tuple *newSsList = (struct int_tuple*) malloc(sizeof(struct int_tuple) * ssp->step_count);
 
-        for (iFor = 0; iFor < ssp.step_count + 1; iFor++) {
-            struct int_tuple *cur = (ssp.steps + iFor);
+        for (iFor = 0; iFor < ssp->step_count + 1; iFor++) {
+            struct int_tuple *cur = (ssp->steps + iFor);
             if (myip_addr != cur->ip_addr && prt_no != cur->port_no) {
                 newSsList[count++] = *cur;
             }
         }
 
-        ssp.steps = newSsList;
+        ssp->steps = newSsList;
 
         printf("chainlist is \n");
 
@@ -294,8 +292,8 @@ void *ss_func(void *file_desc) {
         char nextIp[INET_ADDRSTRLEN];
         uint16_t nextPort = 0;
 
-        for (iLoop = 0; iLoop < ssp.step_count + 1; iLoop++) {
-            struct int_tuple* cur = (ssp.steps + iLoop);
+        for (iLoop = 0; iLoop < ssp->step_count + 1; iLoop++) {
+            struct int_tuple* cur = (ssp->steps + iLoop);
             char ip[INET_ADDRSTRLEN];
             struct in_addr temp;
             temp.s_addr = ntohl(cur->ip_addr);
@@ -318,7 +316,7 @@ void *ss_func(void *file_desc) {
         ss_sck_addr.sin_addr.s_addr = ntohl(nextSS->ip_addr); // use next ss ip
         ss_sck_addr.sin_port = ntohs(nextSS->port_no); // Use next ss port
 
-	int mem_offset = sizeof(struct ss_packet) + (ssp.step_count * sizeof(struct int_tuple));
+	int mem_offset = sizeof(struct ss_packet) + (ssp->step_count * sizeof(struct int_tuple));
 
         int cli_ss = 0;
 
