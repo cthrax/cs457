@@ -18,7 +18,7 @@ const char *DefaultFile = "index.html";
 
 void *ss_func(void *file_desc);	/*Thread Function*/
 
-const int VERSION = 4;
+const int VERSION = 1;
 
 // Ephemeral Port Range, low and hi values
 const int LOWER_IP = 49152;
@@ -192,34 +192,35 @@ void *ss_func(void *file_desc)
 	mem_off+=sizeof(ssp.version);
 		
 	/* Checking for version */
-	if(ntohs(ssp.version) != VERSION)
+	if(ssp.version != VERSION)
 	{
 		printf("Version Mismatch, Dropping Packet and Exiting.\n");
 		close(fd);
 		exit(1);
 	}
-	
+	printf("first emmecpy!\n");
 	memcpy(&ssp.step_count, ssbuff+mem_off, sizeof(ssp.step_count));
 	mem_off+=sizeof(ssp.step_count);
-	hop = ntohs(ssp.step_count);
+	hop = (ssp.step_count);
 //	printf("no.of ss = %d\n", hop);
 	hop--;
 	
 	//memcpy(&ssp.url_len, ssbuff+mem_off, sizeof(ssp.url_len));
 	//memcpy for url_len no longer needed as the url_len variable no longer exists.
 	int len = strlen(ssbuff+mem_off);
+        printf("my len is \ %d \n", len);
 	//mem_off+=sizeof(ssp.url_len);No longer need to increase the offset
 	//int len = ntohs(ssp.url_len);
 //	printf("url_len = %d\n",len);
-	
 	char* ss_url= (char*) malloc(len*sizeof(char) + 1);
 	memcpy(&ss_url, ssbuff+mem_off, len);
 	mem_off+=len;
-	ss_url[len] = '\0';
+	//ss_url[len] = '\0';
 //	printf("URL = %s\n", ss_url);
 	
 	if(hop == 0) // Special case -> wget the file from url!
 	{
+		printf("I'm the getter!\n");
 		struct stat st;
 		char file_buff[384]="";
 	
@@ -305,37 +306,35 @@ void *ss_func(void *file_desc)
 	else
 	{
 		// Structure Instanciation
-		struct int_tuple poip[hop+1];
-		struct char_ip chip[hop+1];
+		struct int_tuple *poip = (int_tuple*) malloc(sizeof(int_tuple * [hop+1]));
+		struct char_ip* chip = (char_ip*) malloc(sizeof(char_ip *[hop+1]));
 		
-		struct int_tuple ssip[hop];
-		struct char_ip nxt_ip[hop];
+		struct int_tuple ssip* = (int_tuple*) malloc(sizeof(int_tuple *[hop]));
+		struct char_ip nxt_ip = (char_ip*) malloc(sizeof(char_ip*[hop]));
 		
 		int iLoop = 0;
 		
 		for(iLoop=0; iLoop<hop+1; iLoop++)
 		{
-			memcpy(&poip[iLoop].ip_addr, ssbuff+mem_off, sizeof(poip[iLoop].ip_addr));
-			mem_off+=sizeof(poip[iLoop].ip_addr);
-			inet_ntop(AF_INET, &poip[iLoop].ip_addr, chip[iLoop].ch_ip, sin_size);
+			memcpy(&poip[iLoop]->ip_addr, ssbuff+mem_off, sizeof(poip[iLoop]->ip_addr));
+			mem_off+=sizeof(poip[iLoop]->ip_addr);
+			inet_ntop(AF_INET, &poip[iLoop]->ip_addr, chip[iLoop]->ch_ip, sin_size);
 //			printf("ip[%d] = %s\t", iLoop, chip[iLoop].ch_ip);
 			
-			memcpy(&poip[iLoop].port_no, ssbuff+mem_off, sizeof(poip[iLoop].port_no));
-			mem_off+=sizeof(poip[iLoop].port_no);
+			memcpy(&poip[iLoop]->port_no, ssbuff+mem_off, sizeof(poip[iLoop]->port_no));
+			mem_off+=sizeof(poip[iLoop]->port_no);
 //			printf("port[%d] = %d\n", iLoop, poip[iLoop].port_no);
 		}
 
 		// Common attributes for any number of SS
-		char sendbuff[1024] ="";
+		char sendbuff[15000] ="";
 		int mem_2off = 0;
 	
 		memcpy(sendbuff, &ssp.version, sizeof(ssp.version));
 		mem_2off+=sizeof(ssp.version);
 	
-		hop = htons(hop);
 		memcpy(sendbuff+mem_2off, &hop, sizeof(ssp.step_count));
 		mem_2off+=sizeof(ssp.step_count);
-		hop = ntohs(hop);
 		
 		//url_len was removed from the struct.
 		//memcpy(sendbuff+mem_2off, &ssp.url_len, sizeof(ssp.url_len));
@@ -349,30 +348,30 @@ void *ss_func(void *file_desc)
 				
 		for(iFor=0; iFor<hop+1; iFor++)
 		{
-			if(myip_addr != poip[iFor].ip_addr)
+			if(myip_addr != poip[iFor]->ip_addr && prt_no != poip[iFor]->portno)
 			{
 				// memcpy() IP to buffer to send to next SS
-				memcpy(sendbuff+mem_2off, &poip[iFor].ip_addr, sizeof(poip[iFor].ip_addr));
-				mem_2off+=sizeof(poip[iFor].ip_addr);
+				memcpy(sendbuff+mem_2off, &poip[iFor]->ip_addr, sizeof(poip[iFor]->ip_addr));
+				mem_2off+=sizeof(poip[iFor]->ip_addr);
 				
 				// memcpy() char IP for local use
-				memcpy(nxt_ip[count].ch_ip, &chip[iFor].ch_ip, sizeof(chip[iFor].ch_ip));
+				memcpy(nxt_ip[count]->ch_ip, &chip[iFor]->ch_ip, sizeof(chip[iFor].ch_ip));
 
 				// memcpy() Port to buffer to send to next SS
-				memcpy(sendbuff+mem_2off, &poip[iFor].port_no, sizeof(poip[iFor].port_no));
-				mem_2off+=sizeof(poip[iFor].port_no);
+				memcpy(sendbuff+mem_2off, &poip[iFor]->port_no, sizeof(poip[iFor].port_no));
+				mem_2off+=sizeof(poip[iFor]->port_no);
 				
 				// memcpy Port for local use
-				memcpy(&ssip[count].port_no, &poip[iFor].port_no, sizeof(poip[iFor].port_no));
-				ssip[count].port_no = ntohs(ssip[count].port_no);
+				memcpy(&ssip[count]->port_no, &poip[iFor]->port_no, sizeof(poip[iFor]->port_no));
+				ssip[count]->port_no = ntohs(ssip[count]->port_no);
 				count++;
 			}
-			else if(myip_addr == poip[iFor].ip_addr)
+			else if(myip_addr == poip[iFor]->ip_addr)
 			{
-				if(prt_no != ntohs(poip[iFor].port_no))
+				if(prt_no != ntohs(poip[iFor]->port_no))
 				{
 					// memcpy() IP to buffer to send to next SS
-					memcpy(sendbuff+mem_2off, &poip[iFor].ip_addr, sizeof(poip[iFor].ip_addr));
+					memcpy(sendbuff+mem_2off, &poip[iFor]->ip_addr, sizeof(poip[iFor]->ip_addr));
 					mem_2off+=sizeof(poip[iFor].ip_addr);
 					
 					// memcpy() char IP for local use
