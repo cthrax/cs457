@@ -175,7 +175,6 @@ void *ss_func(void *file_desc) {
 
     // Code to dememcpy the attributes
     int mem_off = 0;
-    int hop;
     struct ss_packet *ssp = (struct ss_packet*) ssbuff;
 ////
     printf("size got = %d\n", siz);
@@ -283,7 +282,7 @@ void *ss_func(void *file_desc) {
         for (iFor = 0; iFor < ssp->step_count+1; iFor++) { 
             struct int_tuple *cur = &(ssp->steps[iFor]);//
             printf(" inside for loop: %d with cur = %d and %d \n", iFor, ntohl(cur->ip_addr), ntohs(cur->port_no));
-            if (myip_addr != cur->ip_addr && prt_no != cur->port_no) {
+            if (myip_addr != ntohl(cur->ip_addr) && prt_no != ntohs(cur->port_no)) {
                 printf(" Not equal! ip: %d, port: %d\n", ntohl(cur->ip_addr), ntohs(cur->port_no));
                 ssp->steps[count++] = *cur;//count?
             }
@@ -291,7 +290,7 @@ void *ss_func(void *file_desc) {
 
         //Clear out last element
         struct int_tuple blah;
-        ssp->steps[ssp->step_count] = blah;
+        ssp->steps[count] = blah;
 
         printf(" ss - copied ssp->steps\n");
         printf("chainlist is \n");
@@ -307,7 +306,7 @@ void *ss_func(void *file_desc) {
         char nextIp[INET_ADDRSTRLEN];
         uint16_t nextPort = 0;
 
-        for (iLoop = 0; iLoop < ssp->step_count + 1; iLoop++) {
+        for (iLoop = 0; iLoop < ssp->step_count; iLoop++) {
             struct int_tuple* cur = (ssp->steps + iLoop);
             char ip[INET_ADDRSTRLEN];
             struct in_addr temp;
