@@ -375,7 +375,8 @@ void *ss_func(void *file_desc) {
             perror("Next SS Send");
             pthread_exit(NULL);
         }
-        printf("Sent %lu bytes\n", (unsigned long int)bytesSent);
+        size_t packetSize = sizeof(struct ss_packet);
+        printf("Sent %lu bytes, expect to send %lu\n", (unsigned long int)bytesSent, (unsigned long int)packetSize);
 
         //recv file size
         char sizebuff[10] = "";
