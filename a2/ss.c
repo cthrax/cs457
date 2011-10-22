@@ -284,7 +284,9 @@ void *ss_func(void *file_desc) {
 	printf(" ss - starting list %d\nMy info: %s, %d\n", ssp->step_count, myip, prt_no);
         for (iFor = 0; iFor < ssp->step_count+1; iFor++) { 
             printf(" inside for loop: %d with cur = %d and %d \n", iFor, ntohl(ssp->steps[iFor].ip_addr), ntohs(ssp->steps[iFor].port_no));
-            if (myip_addr != ntohl(ssp->steps[iFor].ip_addr) && prt_no != ntohs(ssp->steps[iFor].port_no)) {
+            uint32_t tip = ntohl(ssp->steps[iFor].ip_addr);
+            uint32_t tp = ntohs(ssp->steps[iFor].port_no);
+            if ((tip == myip_addr && tp != prt_no) || (tip != myip_addr && tp != prt_no)) {
                 printf(" Not equal! ip: %d, port: %d\n", ntohl(ssp->steps[iFor].ip_addr), ntohs(ssp->steps[iFor].port_no));
                 ssp->steps[count].ip_addr = ssp->steps[iFor].ip_addr;//count?
                 ssp->steps[count].port_no = ssp->steps[iFor].port_no;
