@@ -111,6 +111,7 @@ int main(int argc, char *argv[]) {
 
     verss.version = 1;
     //*verss.url = (char*) malloc(sizeof(char) * strlen(url));
+    verss.url = (char*) malloc(strlen(url));
     strcpy(verss.url, url);
     //verss.url = url;
 
