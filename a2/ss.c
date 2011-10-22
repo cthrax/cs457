@@ -167,7 +167,7 @@ void *ss_func(void *file_desc) {
     int *filedesc = (int *) file_desc;
     int fd = *filedesc;
 
-    char ssbuff[15000] = "";//The sending *could* be this large w/ a long chainfile, But it probably won't be.
+    char ssbuff[15000];//The sending *could* be this large w/ a long chainfile, But it probably won't be.
     // Read the Input from the Client
     int siz = recv(fd, ssbuff, 15000, 0);
     if ( siz < 0) {
@@ -177,7 +177,6 @@ void *ss_func(void *file_desc) {
     }
 
     // Code to dememcpy the attributes
-    int mem_off = 0;
     struct ss_packet *ssp = (struct ss_packet*) ssbuff;
 ////
     printf("size got = %d\n", siz);
@@ -284,7 +283,7 @@ void *ss_func(void *file_desc) {
         for (iFor = 0; iFor < ssp->step_count+1; iFor++) { 
             printf(" inside for loop: %d with cur = %d and %d \n", iFor, ntohl(ssp->steps[iFor].ip_addr), ntohs(ssp->steps[iFor].port_no));
             uint32_t tip = ntohl(ssp->steps[iFor].ip_addr);
-            uint32_t tp = ntohs(ssp->steps[iFor].port_no);
+            uint16_t tp = ntohs(ssp->steps[iFor].port_no);
             if ((tip == myip_addr && tp != prt_no) || (tip != myip_addr && tp != prt_no)) {
                 printf(" Not equal! ip: %d, port: %d\n", ntohl(ssp->steps[iFor].ip_addr), ntohs(ssp->steps[iFor].port_no));
                 ssp->steps[count].ip_addr = ssp->steps[iFor].ip_addr;//count?
@@ -329,18 +328,12 @@ void *ss_func(void *file_desc) {
         printf("\nNext SS is <%s, %d>\n", nextIp, nextPort);
 
         // Server Address
-        struct sockaddr_in ss_sck_addr;
-        ss_sck_addr.sin_family = AF_INET; // to use IPv4
-        ss_sck_addr.sin_addr.s_addr = ntohl(ssp->steps[nextIdx].ip_addr); // use next ss ip
-        ss_sck_addr.sin_port = ntohs(ssp->steps[nextIdx].port_no); // Use next ss port
-
         int cli_ss = 0;
-
         struct addrinfo hints, *server_sck_addr, *p;
         int rv = 0;
 
         memset(&hints, 0, sizeof hints);
-        hints.ai_family = AF_UNSPEC;
+        hints.ai_family = AF_INET;
         hints.ai_socktype = SOCK_STREAM;
 
         char sPort[6];
@@ -369,7 +362,7 @@ void *ss_func(void *file_desc) {
         printf("Sending packet...\n");
         // Send Packet to data SS
         ssize_t bytesSent = 0;
-        if ((bytesSent = send(cli_ss, &ssp, sizeof(struct ss_packet), 0)) == -1) {
+        if ((bytesSent = send(cli_ss, &(*ssp), sizeof(struct ss_packet), 0)) == -1) {
             close(cli_ss);
             close(fd);
             perror("Next SS Send");
