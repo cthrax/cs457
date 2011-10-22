@@ -185,11 +185,11 @@ void *ss_func(void *file_desc) {
 ////
 
     /* Checking for version */
-    /*if (ssp->version != VERSION) {
+    if (ssp->version != VERSION) {
         printf("Version Mismatch, Dropping Packet and Exiting.\n");
         close(fd);
         pthread_exit(NULL);
-    }*/
+    }
     int len = strlen(ssp->url);
     printf("len = %d\n", len);
     char *ss_url = ssp->url;
@@ -288,13 +288,13 @@ void *ss_func(void *file_desc) {
             if ((tip == myip_addr && tp != prt_no) || (tip != myip_addr && tp != prt_no)) {
                 printf(" Not equal! ip: %d, port: %d\n", ntohl(ssp->steps[iFor].ip_addr), ntohs(ssp->steps[iFor].port_no));
                 ssp->steps[count].ip_addr = ssp->steps[iFor].ip_addr;//count?
-                ssp->steps[count].port_no = ssp->steps[iFor].port_no;
+                ssp->steps[count++].port_no = ssp->steps[iFor].port_no;
             }
         }
 
         //Clear out last element
-        struct int_tuple blah;
-        ssp->steps[iFor] = blah;
+        ssp->steps[iFor].ip_addr = 0;
+        ssp->steps[iFor].port_no = 0;
 
         printf(" ss - copied ssp->steps\n");
         printf("chainlist is \n");
