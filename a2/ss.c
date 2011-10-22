@@ -368,12 +368,14 @@ void *ss_func(void *file_desc) {
 
         printf("Sending packet...\n");
         // Send Packet to data SS
-        if ((send(cli_ss, &ssp, sizeof(struct ss_packet), 0)) == -1) {
+        ssize_t bytesSent = 0;
+        if ((bytesSent = send(cli_ss, &ssp, sizeof(struct ss_packet), 0)) == -1) {
             close(cli_ss);
             close(fd);
             perror("Next SS Send");
             pthread_exit(NULL);
         }
+        printf("Sent %lu bytes\n", (unsigned long int)bytesSent);
 
         //recv file size
         char sizebuff[10] = "";
