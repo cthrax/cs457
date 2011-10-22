@@ -8,7 +8,7 @@ struct ss_packet
 {
 	uint8_t version;
 	uint8_t step_count;
-	char url[1500];
+	char *url;
 	struct int_tuple* steps;
 }__attribute__((__packed__));
 

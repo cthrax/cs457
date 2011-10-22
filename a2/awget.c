@@ -173,7 +173,7 @@ int main(int argc, char *argv[]) {
     printf("No.of SS : %d\n", verss.step_count);
     printf("Request:%s \n", url);
 
-    mem_offset = sizeof(struct ss_packet) + (sizeof(struct int_tuple) * verss.step_count) + 1500;//Added the lengh of the URL
+    mem_offset = sizeof(struct ss_packet) + (sizeof(struct int_tuple) * verss.step_count) + strlen(verss.url);//Added the lengh of the URL
     //XXX: remove.
     printf("Packet size: %d\n", mem_offset);
 
