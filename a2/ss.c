@@ -282,10 +282,10 @@ void *ss_func(void *file_desc) {
         struct int_tuple *newSsList = (struct int_tuple*) malloc(sizeof(struct int_tuple) * ssp->step_count);
 	printf(" ss - starting list %d\nMy info: %d, %d\n", ssp->step_count, myip_addr, prt_no);
         for (iFor = 0; iFor < ssp->step_count+1; iFor++) { 
-            struct int_tuple *cur = (&ssp->steps + iFor);//
-	    printf(" inside for loop: %d with cur = %d and %d \n", iFor, ntohl(cur->ip_addr), ntohs(cur->port_no));
+            struct int_tuple *cur = (ssp->steps + iFor);//
+            printf(" inside for loop: %d with cur = %d and %d \n", iFor, ntohl(cur->ip_addr), ntohs(cur->port_no));
             if (myip_addr != cur->ip_addr && prt_no != cur->port_no) {
-		printf(" Not equal! ip: %d, port: %d\n", ntohl(cur->ip_addr), ntohs(cur->port_no));
+                printf(" Not equal! ip: %d, port: %d\n", ntohl(cur->ip_addr), ntohs(cur->port_no));
                 newSsList[count++] = *cur;//count?
             }
         }
