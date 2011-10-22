@@ -169,11 +169,20 @@ void *ss_func(void *file_desc) {
 
     char ssbuff[15000];//The sending *could* be this large w/ a long chainfile, But it probably won't be.
     // Read the Input from the Client
-    int siz = recv(fd, ssbuff, 15000, 0);
-    if ( siz < 0) {
-        close(fd);
-        perror("Receive");
-        pthread_exit(NULL);
+    int packet_size = sizeof(struct ss_packet);
+    int siz = 0;
+    while(1) {
+        siz += recv(fd, ssbuff, 15000, 0);
+        if ( siz < 0) {
+            close(fd);
+            perror("Receive");
+            pthread_exit(NULL);
+        }
+
+        if (siz >= packet_size) {
+            break;
+        }
+
     }
 
     // Code to dememcpy the attributes
@@ -364,7 +373,7 @@ void *ss_func(void *file_desc) {
         ssize_t bytesSent = 0;
         size_t packetSize = sizeof(struct ss_packet);
         while (1) {
-            bytesSent = send(cli_ss, &(*ssp), sizeof(struct ss_packet) - bytesSent, bytesSent);
+            bytesSent += send(cli_ss, &(*ssp), sizeof(struct ss_packet), bytesSent);
 
             if (bytesSent == -1) {
                 close(cli_ss);
