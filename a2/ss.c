@@ -185,12 +185,11 @@ void *ss_func(void *file_desc) {
 ////
 
     /* Checking for version */
-    if (ssp->version != VERSION) {
+    /*if (ssp->version != VERSION) {
         printf("Version Mismatch, Dropping Packet and Exiting.\n");
         close(fd);
         pthread_exit(NULL);
-    }
-    printf("first emmecpy!\n");//TODO: remove
+    }*/
     int len = strlen(ssp->url);
     printf("len = %d\n", len);
     char *ss_url = ssp->url;
@@ -367,6 +366,7 @@ void *ss_func(void *file_desc) {
             break;
         }
 
+        printf("Sending packet...\n");
         // Send Packet to data SS
         if ((send(cli_ss, &ssp, sizeof(struct ss_packet), 0)) == -1) {
             close(cli_ss);
@@ -379,6 +379,7 @@ void *ss_func(void *file_desc) {
         char sizebuff[10] = "";
         int frecv_bytes = 0;
 
+        printf("Receiving filesize.\n");
         // Read the file size from next SS
         if ((frecv_bytes = recv(cli_ss, sizebuff, 10, 0)) == -1) {
             close(cli_ss);
@@ -387,6 +388,7 @@ void *ss_func(void *file_desc) {
             pthread_exit(NULL);
         }
 
+        printf("Sending filesize.\n");
         // Send File Size to previous SS/Awget
         if ((send(fd, sizebuff, frecv_bytes, 0)) == -1) {
             close(cli_ss);
@@ -396,9 +398,7 @@ void *ss_func(void *file_desc) {
         }
 
         // Hanlde File Size
-        long int filesiz = 0;
-        memcpy(&filesiz, sizebuff, frecv_bytes);
-        filesiz = ntohl(filesiz);
+        long int filesiz = ntohl(filesiz);
 
         // malloc() filesize for receiving file data
         char *databuff = (char*) malloc(filesiz);
