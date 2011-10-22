@@ -106,7 +106,10 @@ int main(int argc, char *argv[]) {
     strcpy(myip, inet_ntoa(**((struct in_addr **)h->h_addr_list)));
 
     // Getting integer value of myip
-    inet_pton(AF_INET, myip, &myip_addr);
+    struct sockaddr_in temp;
+    inet_pton(AF_INET, myip, &(temp.sin_addr));
+    myip_addr = temp.sin_addr.s_addr;
+
 
     memset(&sock, 0, sizeof sock);
     sock.sin_family = AF_INET;
