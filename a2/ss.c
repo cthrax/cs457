@@ -362,13 +362,22 @@ void *ss_func(void *file_desc) {
         printf("Sending packet...\n");
         // Send Packet to data SS
         ssize_t bytesSent = 0;
-        if ((bytesSent = send(cli_ss, &(*ssp), sizeof(struct ss_packet), 0)) == -1) {
-            close(cli_ss);
-            close(fd);
-            perror("Next SS Send");
-            pthread_exit(NULL);
-        }
         size_t packetSize = sizeof(struct ss_packet);
+        while (1) {
+            bytesSent = send(cli_ss, &(*ssp), sizeof(struct ss_packet) - bytesSent, bytesSent);
+
+            if (bytesSent == -1) {
+                close(cli_ss);
+                close(fd);
+                perror("Next SS Send");
+                pthread_exit(NULL);
+            }
+
+            if (bytesSent >= packetSize) {
+                break;
+            }
+        }
+
         printf("Sent %lu bytes, expect to send %lu\n", (unsigned long int)bytesSent, (unsigned long int)packetSize);
 
         //recv file size
