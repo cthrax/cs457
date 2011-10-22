@@ -4,4 +4,7 @@ Jacob Bodmer (jacobbodmer@gmail.com)
 Sudharshan Varada (sudhar@rams.colostate.edu) | (mnvsudhar@gmail.com)
 Sahil Mehta (sahilmehta1985@gmail.com)
 
+This has a limit of 255 hops and a filesize limit of the heap. An optimization that could be done is to chunk files so any size file could be had.
+
+There is a compile warning about ignoring attributes of a variable. This is intentional. We intentionally only allow ephemeral ports for use.
 
