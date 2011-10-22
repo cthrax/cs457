@@ -171,18 +171,11 @@ void *ss_func(void *file_desc) {
     // Read the Input from the Client
     int packet_size = sizeof(struct ss_packet);
     int siz = 0;
-    while(1) {
-        siz += recv(fd, ssbuff, 15000, 0);
-        if ( siz < 0) {
-            close(fd);
-            perror("Receive");
-            pthread_exit(NULL);
-        }
-
-        if (siz >= packet_size) {
-            break;
-        }
-
+    siz += recv(fd, ssbuff, packet_size, MSG_WAITALL);
+    if ( siz < 0) {
+        close(fd);
+        perror("Receive");
+        pthread_exit(NULL);
     }
 
     // Code to dememcpy the attributes
@@ -372,19 +365,13 @@ void *ss_func(void *file_desc) {
         // Send Packet to data SS
         ssize_t bytesSent = 0;
         size_t packetSize = sizeof(struct ss_packet);
-        while (1) {
-            bytesSent += send(cli_ss, &(*ssp), sizeof(struct ss_packet), bytesSent);
+        bytesSent += send(cli_ss, &(*ssp), sizeof(struct ss_packet), MSG_WAITALL);
 
-            if (bytesSent == -1) {
-                close(cli_ss);
-                close(fd);
-                perror("Next SS Send");
-                pthread_exit(NULL);
-            }
-
-            if (bytesSent >= packetSize) {
-                break;
-            }
+        if (bytesSent == -1) {
+            close(cli_ss);
+            close(fd);
+            perror("Next SS Send");
+            pthread_exit(NULL);
         }
 
         printf("Sent %lu bytes, expect to send %lu\n", (unsigned long int)bytesSent, (unsigned long int)packetSize);
