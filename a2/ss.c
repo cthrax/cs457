@@ -301,7 +301,7 @@ void *ss_func(void *file_desc) {
         // picking a random ss from the list
         int rand_ss;
         srand(time(NULL));
-        rand_ss = rand() % hop;
+        rand_ss = rand() % ssp->step_count;
 
         struct int_tuple* nextSS;
         char nextIp[INET_ADDRSTRLEN];
