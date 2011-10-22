@@ -27,7 +27,7 @@ const int UPPER_IP = 65535;
 /* Global Declarations for Thread */
 int prt_no; // Port No. from command line
 char myip[15] = ""; // char array to store SS ip
-uint32_t myip_addr; // Integer of myip for comparison
+ myip_addr; // Integer of myip for comparison
 socklen_t sin_size; // Used in inet_ntop()
 
 int main(int argc, char *argv[]) {
@@ -280,7 +280,7 @@ void *ss_func(void *file_desc) {
 	printf( "url is %s\n", ssp->url);
         int count = 0, iFor = 0;
         struct int_tuple *newSsList = (struct int_tuple*) malloc(sizeof(struct int_tuple) * ssp->step_count);
-	printf(" ss - starting list %d\nMy info: %d, %d\n", ssp->step_count, myip_addr, prt_no);
+	printf(" ss - starting list %d\nMy info: %s, %d\n", ssp->step_count, myip, prt_no);
         for (iFor = 0; iFor < ssp->step_count+1; iFor++) { 
             struct int_tuple *cur = (ssp->steps + iFor);//
             printf(" inside for loop: %d with cur = %d and %d \n", iFor, ntohl(cur->ip_addr), ntohs(cur->port_no));
