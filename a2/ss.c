@@ -27,7 +27,7 @@ const int UPPER_IP = 65535;
 /* Global Declarations for Thread */
 int prt_no; // Port No. from command line
 char myip[15] = ""; // char array to store SS ip
- myip_addr; // Integer of myip for comparison
+uint32_t myip_addr; // Integer of myip for comparison
 socklen_t sin_size; // Used in inet_ntop()
 
 int main(int argc, char *argv[]) {
