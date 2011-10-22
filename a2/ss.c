@@ -279,18 +279,20 @@ void *ss_func(void *file_desc) {
         // Check for local IP and Chainlist
 	printf( "url is %s\n", ssp->url);
         int count = 0, iFor = 0;
-        struct int_tuple *newSsList = (struct int_tuple*) malloc(sizeof(struct int_tuple) * ssp->step_count);
 	printf(" ss - starting list %d\nMy info: %s, %d\n", ssp->step_count, myip, prt_no);
         for (iFor = 0; iFor < ssp->step_count+1; iFor++) { 
             struct int_tuple *cur = &(ssp->steps[iFor]);//
             printf(" inside for loop: %d with cur = %d and %d \n", iFor, ntohl(cur->ip_addr), ntohs(cur->port_no));
             if (myip_addr != cur->ip_addr && prt_no != cur->port_no) {
                 printf(" Not equal! ip: %d, port: %d\n", ntohl(cur->ip_addr), ntohs(cur->port_no));
-                newSsList[count++] = *cur;//count?
+                ssp->steps[count++] = *cur;//count?
             }
         }
 
-        ssp->steps = newSsList;
+        //Clear out last element
+        struct int_tuple blah;
+        ssp->steps[ssp->step_count] = blah;
+
         printf(" ss - copied ssp->steps\n");
         printf("chainlist is \n");
 
