@@ -302,9 +302,9 @@ void *ss_func(void *file_desc) {
         srand(time(NULL));
         rand_ss = rand() % ssp->step_count;
 
-        struct int_tuple* nextSS;
         char nextIp[INET_ADDRSTRLEN];
         uint16_t nextPort = 0;
+        int nextIdx = 0;
 
         for (iLoop = 0; iLoop < ssp->step_count; iLoop++) {
             struct int_tuple* cur = (ssp->steps + iLoop);
@@ -318,7 +318,7 @@ void *ss_func(void *file_desc) {
             if (iLoop == rand_ss) {
                 strcpy(nextIp, ip);
                 nextPort = port;
-                nextSS = cur;
+                nextIdx = iLoop;
             }
         }
 
@@ -327,10 +327,10 @@ void *ss_func(void *file_desc) {
         // Server Address
         struct sockaddr_in ss_sck_addr;
         ss_sck_addr.sin_family = AF_INET; // to use IPv4
-        ss_sck_addr.sin_addr.s_addr = ntohl(nextSS->ip_addr); // use next ss ip
-        ss_sck_addr.sin_port = ntohs(nextSS->port_no); // Use next ss port
+        ss_sck_addr.sin_addr.s_addr = ntohl(ssp->steps[nextIdx].ip_addr); // use next ss ip
+        ss_sck_addr.sin_port = ntohs(ssp->steps[nextIdx].port_no); // Use next ss port
 
-	int mem_offset = sizeof(struct ss_packet) + (ssp->step_count * sizeof(struct int_tuple));
+	int mem_offset = sizeof(struct ss_packet);
 
         int cli_ss = 0;
 
