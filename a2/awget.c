@@ -37,8 +37,6 @@ int main(int argc, char *argv[]) {
     int port_no = 0; // Port Number got from chain file
 
     char ssbuff[512] = ""; // Buffer to be sent to SS
-    int mem_offset = 0;
-
     int arg_counter = 1;
 
     //Structure Intialization
@@ -170,9 +168,9 @@ int main(int argc, char *argv[]) {
     printf("No.of SS : %d\n", verss.step_count);
     printf("Request:%s \n", url);
 
-    mem_offset = sizeof(struct ss_packet); //Added the lengh of the URL
     //XXX: remove.
-    printf("Packet size: %d\n", mem_offset);
+    int size = sizeof(struct ss_packet);
+    printf("Packet size: %d\n", size);
 
     // Create a Socket
     if ((cli_sd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -242,7 +240,7 @@ int main(int argc, char *argv[]) {
     printf("\nSending data... \n");
 
     // Send Data to SS
-    if ((numbytes = send(cli_sd, &verss, mem_offset, 0)) == -1) {
+    if ((numbytes = send(cli_sd, &verss, sizeof(struct ss_packet), 0)) == -1) {
         close(cli_sd);
         perror("URL Send");
         exit(1);

@@ -181,7 +181,7 @@ void *ss_func(void *file_desc) {
     struct ss_packet *ssp = (struct ss_packet*) ssbuff;
 ////
     printf("size got = %d\n", siz);
-    printf("version: %d", ssp->version);
+    printf("version: %d\n", ssp->version);
 ////
 
     /* Checking for version */
@@ -335,8 +335,6 @@ void *ss_func(void *file_desc) {
         ss_sck_addr.sin_addr.s_addr = ntohl(ssp->steps[nextIdx].ip_addr); // use next ss ip
         ss_sck_addr.sin_port = ntohs(ssp->steps[nextIdx].port_no); // Use next ss port
 
-        int mem_offset = sizeof(struct ss_packet);
-
         int cli_ss = 0;
 
         struct addrinfo hints, *server_sck_addr, *p;
@@ -370,7 +368,7 @@ void *ss_func(void *file_desc) {
         }
 
         // Send Packet to data SS
-        if ((send(cli_ss, &ssp, mem_offset, 0)) == -1) {
+        if ((send(cli_ss, &ssp, sizeof(struct ss_packet), 0)) == -1) {
             close(cli_ss);
             close(fd);
             perror("Next SS Send");
