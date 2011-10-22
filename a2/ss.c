@@ -280,17 +280,17 @@ void *ss_func(void *file_desc) {
         int count = 0, iFor = 0;
 	printf(" ss - starting list %d\nMy info: %s, %d\n", ssp->step_count, myip, prt_no);
         for (iFor = 0; iFor < ssp->step_count+1; iFor++) { 
-            struct int_tuple *cur = &(ssp->steps[iFor]);//
-            printf(" inside for loop: %d with cur = %d and %d \n", iFor, ntohl(cur->ip_addr), ntohs(cur->port_no));
-            if (myip_addr != ntohl(cur->ip_addr) && prt_no != ntohs(cur->port_no)) {
-                printf(" Not equal! ip: %d, port: %d\n", ntohl(cur->ip_addr), ntohs(cur->port_no));
-                ssp->steps[count++] = *cur;//count?
+            printf(" inside for loop: %d with cur = %d and %d \n", iFor, ntohl(ssp->steps[iFor].ip_addr), ntohs(ssp->steps[iFor].port_no));
+            if (myip_addr != ntohl(ssp->steps[iFor].ip_addr) && prt_no != ntohs(ssp->steps[iFor].port_no)) {
+                printf(" Not equal! ip: %d, port: %d\n", ntohl(ssp->steps[iFor].ip_addr), ntohs(ssp->steps[iFor].port_no));
+                ssp->steps[count].ip_addr = ssp->steps[iFor].ip_addr;//count?
+                ssp->steps[count].port_no = ssp->steps[iFor].port_no;
             }
         }
 
         //Clear out last element
         struct int_tuple blah;
-        ssp->steps[count] = blah;
+        ssp->steps[iFor] = blah;
 
         printf(" ss - copied ssp->steps\n");
         printf("chainlist is \n");
