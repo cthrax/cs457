@@ -181,7 +181,7 @@ void *ss_func(void *file_desc) {
     struct ss_packet *ssp = (struct ss_packet*) ssbuff;
 ////
     printf("size got = %d\n", siz);
-    
+    printf("version: %d", ssp->version);
 ////
 
     /* Checking for version */
