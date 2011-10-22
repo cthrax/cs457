@@ -330,24 +330,38 @@ void *ss_func(void *file_desc) {
         ss_sck_addr.sin_addr.s_addr = ntohl(ssp->steps[nextIdx].ip_addr); // use next ss ip
         ss_sck_addr.sin_port = ntohs(ssp->steps[nextIdx].port_no); // Use next ss port
 
-	int mem_offset = sizeof(struct ss_packet);
+        int mem_offset = sizeof(struct ss_packet);
 
         int cli_ss = 0;
 
-        // Create a Socket for the next Stepping Stone
-        if ((cli_ss = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-            close(fd);
-            perror("Next SS Socket");
+        struct addrinfo hints, *server_sck_addr, *p;
+        int rv = 0;
+
+        memset(&hints, 0, sizeof hints);
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_socktype = SOCK_STREAM;
+
+        char sPort[6];
+        sprintf(sPort, "%d", nextPort);
+        if ((rv = getaddrinfo(nextIp, sPort, &hints, &server_sck_addr)) != 0) {
+            fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
             pthread_exit(NULL);
         }
 
-        // Conenct to next Stepping Stone
-        if (connect(cli_ss, (struct sockaddr *) &ss_sck_addr,
-                sizeof(ss_sck_addr)) != 0) {
-            close(cli_ss);
-            close(fd);
-            perror("Next SS Connect");
-            pthread_exit(NULL);
+        // loop through all the results and connect to the first we can
+        for(p = server_sck_addr; p != NULL; p = p->ai_next) {
+            if ((cli_ss = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
+                perror("client: socket");
+                continue;
+            }
+
+            if (connect(cli_ss, p->ai_addr, p->ai_addrlen) == -1) {
+                close(cli_ss);
+                perror("client: connect");
+                continue;
+            }
+
+            break;
         }
 
         // Send Packet to data SS
