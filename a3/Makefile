@@ -7,4 +7,4 @@ clean:
 	rm -f *.o *.pgm $(EXEC)
 
 myresolver:
-	$(CC) -o $@ awget.c
+	$(CC) -o $@ myresolver.c

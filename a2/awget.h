@@ -1,6 +1,7 @@
 #ifndef AWGET_H_
 #define AWGET_H_
 /* Holds the structures used by both AWGET & SS*/
+#include <stdio.h>
 #include <stdlib.h>
 
 // <<IP,Port>> Pair Sturcture
