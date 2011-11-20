@@ -101,6 +101,7 @@ void unpackExtendedMessageHeader(struct MESSAGE_HEADER* header,
     ret->nameserver_count = header->nameserver_count;
     ret->additional_count = header->additional_count;
 
+    printf("Description: %u\n", header->description);
     ret->description.qr_type = header->description & DNS_QR_MASK;
     ret->description.opcode = header->description & DNS_OPCODE_MASK;
     ret->description.auth_answer = header->description & DNS_AA_MASK;
@@ -133,65 +134,90 @@ void repackExtendedMessageHeader(struct MESSAGE_HEADER_EXT* header,
 
 int main(int argc, char *argv[]) {
     //Take the input string, pass to the parseLabel method.
-    char name[20] = "www.google.com";//For now, simply use a hard-coded domain.
-    struct hostent* host;
-    struct DNS_MESSAGE test_message;
-    test_message.header.id = 10;
+    char name[20] = "www.google.com"; //For now, simply use a hard-coded domain.
     //Grabbed from A1 udp client
-    char* hostname = ROOT_IP[4];
+    char* root_name = ROOT_IP[2];
     int sockfd;
-    struct addrinfo hints, *servinfo, *p;
-    int rv;
-    int numbytes;
-    int retval = 0;
-    void* buf;
+    struct sockaddr_in root_server;
     char port[6] = "53";
 
-    memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_DGRAM;
+    // As per man page, set protocol to 0 (generic IP)
+	if ((sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
+		fprintf(stderr, "Failed to create socket.");
+	}
 
-    if ((rv = getaddrinfo(hostname, port, &hints, &servinfo)) != 0) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-        return 1;
+    struct DNS_MESSAGE test_message;
+    test_message.header.id = 10;
+    test_message.header.additional_count = 0;
+    test_message.header.answer_count = 0;
+    test_message.header.description = 0;
+    test_message.header.nameserver_count = 0;
+    test_message.header.question_count = 0;
+
+    struct MESSAGE_HEADER header;
+    header.id = htons(10);
+    header.additional_count = 0;
+    header.answer_count = 0;
+    header.description = 0;
+    header.nameserver_count = 0;
+    header.question_count = 0;
+
+    fprintf(stderr, "Trying DNS server %s\n", root_name);
+
+    root_server.sin_family = AF_INET;
+    root_server.sin_len = 0;
+    root_server.sin_port = htons(DNS_PORT);
+    // Clear out the data.
+    memset(root_server.sin_zero, '\0', sizeof(root_server.sin_zero));
+    int result = inet_pton(AF_INET, root_name, &(root_server.sin_addr.s_addr));
+    if (result != 1) {
+    	if (result == 0) {
+    		fprintf(stderr, "Invalid IP passed in.\n");
+    	} else if (result < 0) {
+    		fprintf(stderr, "Unable to parse IP address: %s\n", strerror(errno));
+    	}
+    	exit(1);
     }
 
-    for (p = servinfo; p != NULL; p = p->ai_next) {
-        if ((sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol))
-                == -1) {
-            continue;
-        }
-
-        break;
-    }
-
-    if (p == NULL) {
-        fprintf(stderr, "failed to bind socket\n");
-        return 2;
-    }
-
-    struct in_addr test;
-    test.s_addr = (inet_addr(hostname));
     //SETUP a good message header for testing. 
     printf("Testing send\n");
-    if (sendto(sockfd, (void*) &test_message, MAX_UDP_SIZE, 0, p->ai_addr, p->ai_addrlen) < 0) { //send DNS Message to the server
-        fprintf(stderr, "sendto error");
-        exit(1);
-    }
-    fprintf(stderr, "TEST");
-    printf("done sending... wait for reply!");
-    void* data = malloc(sizeof(char) * MAX_UDP_SIZE);
-    recvfrom(sockfd, data, 1, 0, p->ai_addr, &(p->ai_addrlen));
+    int size = sizeof(struct MESSAGE_HEADER);
+    int bytesSent = 0;
 
-    printf("done recv from\n");
-    fprintf(stderr, "TEST1");
+    while (bytesSent < size) {
+    	char ip[INET_ADDRSTRLEN];
+    	inet_ntop(AF_INET, &(root_server), ip,INET_ADDRSTRLEN);
+    	fprintf(stderr, "Sending %d bytes to %s\n", size, ip);
+    	bytesSent = sendto(sockfd, (void*) (&header), size, 0, (struct sockaddr*) (&(root_server)), (socklen_t) (sizeof(struct sockaddr_in)));
+    	fprintf(stderr, "Sent %d bytes\n", bytesSent);
+
+    	if (bytesSent < 0) {
+    		fprintf(stderr, "Failed to send. %s\n", strerror(errno));
+    		exit(1);
+    	}
+    }
+
+    fprintf(stderr, "TEST\n");
+    printf("done sending... wait for reply!\n");
+    void* data = malloc(sizeof(char) * MAX_UDP_SIZE);
+    socklen_t recvLen;
+    int bytesReceived = recvfrom(sockfd, data, MAX_UDP_SIZE, 0, (struct sockaddr*) (&(root_server.sin_addr)), &recvLen);
+    printf("Received %d\n", bytesReceived);
+
+    char* buf = data;
+    struct MESSAGE_HEADER* respHeader = (struct MESSAGE_HEADER*) malloc(size);
+    if (bytesReceived >= size) {
+    	memcpy(respHeader, buf, size);
+    	respHeader->id = ntohs(respHeader->id);
+    	respHeader->description = ntohs(respHeader->description);
+    	printf("Id: %u\n", respHeader->id);
+    }
+    fprintf(stderr, "TEST1\n");
     struct MESSAGE_HEADER_EXT* ret = malloc(sizeof(struct MESSAGE_HEADER_EXT));
-    unpackExtendedMessageHeader(&(((struct DNS_MESSAGE*) data)->header), ret);
+    unpackExtendedMessageHeader(respHeader, ret);
 
     printf("Z = %d \n(Should be 0)\n", ret->description.Z);
     printf("respcode = %d \n(Should be error:1)\n", ret->description.resp_code);
-
-    freeaddrinfo(servinfo);
 
     close(sockfd);
 }
