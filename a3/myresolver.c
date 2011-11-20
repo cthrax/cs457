@@ -23,8 +23,21 @@
 //		 192.36.148.17
 //		 128.63.2.53
 //		 Use port 53
-char* ROOT_IP[6] = { "202.12.27.33", "199.7.83.42", "193.0.14.129",
-        "192.58.128.30", "192.36.148.17", "128.63.2.53", };
+char* ROOT_IP[14] = { "202.12.27.33" , //m 
+   		     "199.7.83.42"   , //
+   		     "198.41.0.4"    , //a
+   		     "192.228.79.201", //b
+  		     "193.0.14.129"  ,
+		     "192.58.128.30" ,
+		     "192.36.148.17" ,
+   		     "128.63.2.53"   ,
+   		     "192.33.4.12"   , //c
+   		     "128.8.10.90"   , //d
+		     "192.203.230.10", //e
+		     "192.5.5.241"   , //f
+		     "192.112.36.4"  , //g
+		     "128.63.2.53"   , //h
+   		   };
 struct LABEL_LIST* parseLabels(char* str) {
     struct LABEL_LIST* list = (struct LABEL_LIST*) malloc(
             sizeof(struct LABEL_LIST));
@@ -122,9 +135,9 @@ int main(int argc, char *argv[]) {
     char name[20] = "www.google.com";//For now, simply use a hard-coded domain.
     struct hostent* host;
     struct DNS_MESSAGE test_message;
-
+    test_message.header.id = 10;
     //Grabbed from A1 udp client
-    char* hostname = ROOT_IP[1];
+    char* hostname = ROOT_IP[4];
     int sockfd;
     struct addrinfo hints, *servinfo, *p;
     int rv;
@@ -157,19 +170,20 @@ int main(int argc, char *argv[]) {
     }
 
     struct in_addr test;
-    test.s_addr = inet_ntoa(inet_addr(hostname));
-
+    test.s_addr = (inet_addr(hostname));
+    //SETUP a good message header for testing. 
     printf("Testing send\n");
-    if (sendto(sockfd, (void*) &test_message, 1, 0, p->ai_addr, p->ai_addrlen) < 0) { //send DNS Message to the server
+    if (sendto(sockfd, (void*) &test_message, MAX_UDP_SIZE, 0, p->ai_addr, p->ai_addrlen) < 0) { //send DNS Message to the server
         fprintf(stderr, "sendto error");
         exit(1);
     }
-
+    fprintf(stderr, "TEST");
     printf("done sending... wait for reply!");
     void* data = malloc(sizeof(char) * MAX_UDP_SIZE);
-    recvfrom(sockfd, data, MAX_UDP_SIZE, 0, p->ai_addr, &(p->ai_addrlen));
+    recvfrom(sockfd, data, 1, 0, p->ai_addr, &(p->ai_addrlen));
 
     printf("done recv from\n");
+    fprintf(stderr, "TEST1");
     struct MESSAGE_HEADER_EXT* ret = malloc(sizeof(struct MESSAGE_HEADER_EXT));
     unpackExtendedMessageHeader(&(((struct DNS_MESSAGE*) data)->header), ret);
 
