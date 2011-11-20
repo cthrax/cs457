@@ -8,6 +8,7 @@ typedef uint16_t RR_TYPE;
 typedef uint16_t QCLASS;
 
 const uint16_t MAX_UDP_SIZE = 512;
+const uint8_t DNS_PORT = 53;
 
 //QCLASS
 const QCLASS MESSAGE_QCLASS_IN = 0x0001;
