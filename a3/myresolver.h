@@ -7,6 +7,8 @@
 typedef uint16_t RR_TYPE;
 typedef uint16_t QCLASS;
 
+const uint8_t MAX_UDP_SIZE = 512 ;
+
 //QCLASS
 const QCLASS MESSAGE_QCLASS_IN = 0x0001;
 
