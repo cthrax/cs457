@@ -39,6 +39,11 @@ char* ROOT_IP[14] = {
 		 "202.12.27.33"  , //m
 };
 
+int sockfd;
+struct sockaddr_in server;
+socklen_t server_size;
+int cur_root_server = 0;
+
 struct LABEL_LIST* parseLabels(char* str) {
     struct LABEL_LIST* list = (struct LABEL_LIST*) malloc(
             sizeof(struct LABEL_LIST));
@@ -132,14 +137,66 @@ void repackExtendedMessageHeader(struct MESSAGE_HEADER_EXT* header,
             & header->description.resp_code;
 }
 
+void sendNumBytes(void* data, int size) {
+	int bytesSent = 0;
+	char ip[INET_ADDRSTRLEN];
+	inet_ntop(AF_INET, (&server.sin_addr), ip, INET_ADDRSTRLEN);
+
+    while (bytesSent < size) {
+    	fprintf(stderr, "Sending %d bytes to %s\n", size, ip);
+    	bytesSent += sendto(sockfd, data + bytesSent, size - bytesSent, 0, (struct sockaddr*)(&server), server_size);
+    	fprintf(stderr, "Sent %d bytes\n", bytesSent);
+
+    	if (bytesSent < 0) {
+    		fprintf(stderr, "Failed to send. %s\n", strerror(errno));
+    		exit(1);
+    	}
+    }
+}
+
+void appendToBuffer(char* buf, void* data, int size, int* total_size) {
+	if (*total_size + size > MAX_UDP_SIZE) {
+		fprintf(stderr, "Packet too large. Aborting.");
+		exit(1);
+	}
+
+	memcpy(buf, data, size);
+	buf += size;
+	*total_size += size;
+}
+
+void sendDnsMessage(struct DNS_MESSAGE* message) {
+	int packet_size = 0;
+	char* buf = (char*) malloc(MAX_UDP_SIZE);
+	char* itr = buf;
+
+	//Send Header
+	appendToBuffer(itr, (&message->header), sizeof(struct MESSAGE_HEADER), &packet_size);
+
+    int i = 0;
+    //Send Question
+    for (i = 0; i < ntohs(message->header.question_count); i++) {
+    	struct MESSAGE_QUESTION* cur = message->question + i;
+    	appendToBuffer(itr, cur->qname, strlen(cur->qname), &packet_size);
+    	RR_TYPE type = htons(cur->qtype);
+    	QCLASS class = htons(cur->qclass);
+    	appendToBuffer(itr, &type, sizeof(type), &packet_size);
+    	appendToBuffer(itr, &class, sizeof(class), &packet_size);
+    }
+
+    sendNumBytes(buf, packet_size);
+}
+
+char* getNextRootServer() {
+	return ROOT_IP[cur_root_server++];
+}
+
 int main(int argc, char *argv[]) {
     //Take the input string, pass to the parseLabel method.
     char name[20] = "www.google.com"; //For now, simply use a hard-coded domain.
     //Grabbed from A1 udp client
-    char* root_name = ROOT_IP[2];
-    int sockfd;
-    struct sockaddr_in root_server;
-    char port[6] = "53";
+    char* root_name = getNextRootServer();
+    server_size = sizeof(struct sockaddr_in);
 
     // As per man page, set protocol to 0 (generic IP)
 	if ((sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
@@ -147,29 +204,28 @@ int main(int argc, char *argv[]) {
 	}
 
     struct DNS_MESSAGE test_message;
-    test_message.header.id = 10;
+    test_message.header.id = htons(10);
     test_message.header.additional_count = 0;
     test_message.header.answer_count = 0;
     test_message.header.description = 0;
     test_message.header.nameserver_count = 0;
-    test_message.header.question_count = 0;
+    test_message.header.question_count = htons(1);
 
-    struct MESSAGE_HEADER header;
-    header.id = htons(10);
-    header.additional_count = 0;
-    header.answer_count = 0;
-    header.description = 0;
-    header.nameserver_count = 0;
-    header.question_count = 0;
+    struct MESSAGE_QUESTION* question = (struct MESSAGE_QUESTION*) malloc(sizeof(struct MESSAGE_QUESTION));
+    question->qname = name;
+    question->qclass = htons(MESSAGE_QCLASS_IN);
+    question->qtype = htons(MESSAGE_QTYPE_AAAA);
+
+    test_message.question = question;
 
     fprintf(stderr, "Trying DNS server %s\n", root_name);
 
-    root_server.sin_family = AF_INET;
-    root_server.sin_len = 0;
-    root_server.sin_port = htons(DNS_PORT);
+    server.sin_family = AF_INET;
+    server.sin_len = 0;
+    server.sin_port = htons(DNS_PORT);
     // Clear out the data.
-    memset(root_server.sin_zero, '\0', sizeof(root_server.sin_zero));
-    int result = inet_pton(AF_INET, root_name, &(root_server.sin_addr.s_addr));
+    memset(server.sin_zero, '\0', sizeof(server.sin_zero));
+    int result = inet_pton(AF_INET, root_name, &(server.sin_addr.s_addr));
     if (result != 1) {
     	if (result == 0) {
     		fprintf(stderr, "Invalid IP passed in.\n");
@@ -181,40 +237,44 @@ int main(int argc, char *argv[]) {
 
     //SETUP a good message header for testing. 
     printf("Testing send\n");
-    int size = sizeof(struct MESSAGE_HEADER);
-    int bytesSent = 0;
 
-    while (bytesSent < size) {
-    	char ip[INET_ADDRSTRLEN];
-    	inet_ntop(AF_INET, &(root_server), ip,INET_ADDRSTRLEN);
-    	fprintf(stderr, "Sending %d bytes to %s\n", size, ip);
-    	bytesSent = sendto(sockfd, (void*) (&header), size, 0, (struct sockaddr*) (&(root_server)), (socklen_t) (sizeof(struct sockaddr_in)));
-    	fprintf(stderr, "Sent %d bytes\n", bytesSent);
-
-    	if (bytesSent < 0) {
-    		fprintf(stderr, "Failed to send. %s\n", strerror(errno));
-    		exit(1);
-    	}
-    }
+    sendDnsMessage(&test_message);
 
     fprintf(stderr, "TEST\n");
     printf("done sending... wait for reply!\n");
-    void* data = malloc(sizeof(char) * MAX_UDP_SIZE);
+    char* data = malloc(sizeof(char) * MAX_UDP_SIZE);
     socklen_t recvLen;
-    int bytesReceived = recvfrom(sockfd, data, MAX_UDP_SIZE, 0, (struct sockaddr*) (&(root_server.sin_addr)), &recvLen);
-    printf("Received %d\n", bytesReceived);
+    int bytesReceived = recvfrom(sockfd, data, sizeof(struct MESSAGE_HEADER), 0, (struct sockaddr*) (&(server)), &recvLen);
+    fprintf(stderr, "Received %d\n", bytesReceived);
 
-    char* buf = data;
-    struct MESSAGE_HEADER* respHeader = (struct MESSAGE_HEADER*) malloc(size);
-    if (bytesReceived >= size) {
-    	memcpy(respHeader, buf, size);
-    	respHeader->id = ntohs(respHeader->id);
-    	respHeader->description = ntohs(respHeader->description);
-    	printf("Id: %u\n", respHeader->id);
+    struct DNS_MESSAGE* response = (struct DNS_MESSAGE*) malloc(sizeof(struct DNS_MESSAGE));
+    if (bytesReceived >= sizeof(struct MESSAGE_HEADER)) {
+    	memcpy(&(response->header), data, sizeof(struct MESSAGE_HEADER));
+    	response->header.id = ntohs(response->header.id);
+    	response->header.description = ntohs(response->header.description);
+    	printf("Id: %u\n", response->header.id);
     }
     fprintf(stderr, "TEST1\n");
     struct MESSAGE_HEADER_EXT* ret = malloc(sizeof(struct MESSAGE_HEADER_EXT));
-    unpackExtendedMessageHeader(respHeader, ret);
+    unpackExtendedMessageHeader(&(response->header), ret);
+
+    // Always failing this for some reason, maybe an error code doesn't count as a response?
+    /*if (ret->description.qr_type == DNS_QR_TYPE_QUERY) {
+    	fprintf(stderr, "Expected a response, received a query. Aborting.\n");
+    	exit(1);
+    }*/
+
+    if (response->header.question_count > 0) {
+    	int i = 0;
+    	for (i = 0; i < ntohs(response->header.question_count); i++) {
+    		int labelCount = 0;
+
+    		while (1) {
+
+    			bytesReceived += recvfrom(sockfd, data + bytesReceived, 1, 0, (struct sockaddr*) (&(server)), &server_size);
+    		}
+    	}
+    }
 
     printf("Z = %d \n(Should be 0)\n", ret->description.Z);
     printf("respcode = %d \n(Should be error:1)\n", ret->description.resp_code);
