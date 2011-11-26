@@ -99,21 +99,22 @@ void unpackExtendedMessageHeader(struct MESSAGE_HEADER* header,
         fprintf(stderr, "Uninitialized return struct.");
         return;
     }
-    ret->id = header->id;
-    ret->question_count = header->question_count;
-    ret->answer_count = header->answer_count;
-    ret->nameserver_count = header->nameserver_count;
-    ret->additional_count = header->additional_count;
+    ret->id = ntohs(header->id);
+    ret->question_count = ntohs(header->question_count);
+    ret->answer_count = ntohs(header->answer_count);
+    ret->nameserver_count = ntohs(header->nameserver_count);
+    ret->additional_count = ntohs(header->additional_count);
 
     printf("Description: %u\n", header->description);
-    ret->description.qr_type = header->description & DNS_QR_MASK;
-    ret->description.opcode = header->description & DNS_OPCODE_MASK;
-    ret->description.auth_answer = header->description & DNS_AA_MASK;
-    ret->description.trunc = header->description & DNS_TRUNC_MASK;
-    ret->description.recurse_desired = header->description & DNS_RD_MASK;
-    ret->description.recurse_available = header->description & DNS_RA_MASK;
-    ret->description.Z = header->description & DNS_Z_MASK;
-    ret->description.resp_code = header->description & DNS_RCODE_MASK;
+    uint16_t desc = ntohs(header->description);
+    ret->description.qr_type = desc & DNS_QR_MASK;
+    ret->description.opcode = desc & DNS_OPCODE_MASK;
+    ret->description.auth_answer = desc & DNS_AA_MASK;
+    ret->description.trunc = desc & DNS_TRUNC_MASK;
+    ret->description.recurse_desired = desc & DNS_RD_MASK;
+    ret->description.recurse_available = desc & DNS_RA_MASK;
+    ret->description.Z = desc & DNS_Z_MASK;
+    ret->description.resp_code = desc & DNS_RCODE_MASK;
 }
 
 //ret assumed already allocated.
@@ -123,17 +124,17 @@ void repackExtendedMessageHeader(struct MESSAGE_HEADER_EXT* header,
         fprintf(stderr, "Uninitialized return struct.");
         return;
     }
-    ret->id = header->id;
-    ret->question_count = header->question_count;
-    ret->answer_count = header->answer_count;
-    ret->nameserver_count = header->nameserver_count;
-    ret->additional_count = header->additional_count;
+    ret->id = htons(header->id);
+    ret->question_count = htons(header->question_count);
+    ret->answer_count = htons(header->answer_count);
+    ret->nameserver_count = htons(header->nameserver_count);
+    ret->additional_count = htons(header->additional_count);
 
-    ret->description = header->description.qr_type & header->description.opcode
+    ret->description = htons(header->description.qr_type & header->description.opcode
             & header->description.auth_answer & header->description.trunc
             & header->description.recurse_desired
             & header->description.recurse_available & header->description.Z
-            & header->description.resp_code;
+            & header->description.resp_code);
 }
 
 void sendNumBytes(void* data, int size, struct sockaddr_in* server) {
@@ -336,97 +337,90 @@ uint16_t getUint16(char* buf) {
 	return ntohs(ret);
 }
 
-void getQuestion(struct MESSAGE_QUESTION** question, int count, int *bytesReceived, char* buf, struct sockaddr_in *server) {
+void getQuestion(struct MESSAGE_QUESTION** question, int count, int *bytesParsed, char* buf) {
     if (count > 0) {
     	*question = (struct MESSAGE_QUESTION*)malloc(sizeof(struct MESSAGE_QUESTION) * count);
     	int i = 0;
     	for (i = 0; i < count; i++) {
     		struct MESSAGE_QUESTION *newMsg = (struct MESSAGE_QUESTION*) malloc(sizeof(struct MESSAGE_QUESTION));
-    		char* start = buf + *bytesReceived;
-    		int startPos = *bytesReceived;
+    		char* start = buf + *bytesParsed;
+    		int startPos = *bytesParsed;
     		while (1) {
     			//TODO: Handle compression
-    			*bytesReceived += recvNumBytes(buf + *bytesReceived, 1, server);
     			//Get size of label
-    			uint8_t curSize = (uint8_t) *(buf + *bytesReceived - 1);
+    			uint8_t curSize = (uint8_t) *(buf + *bytesParsed);
+    			*bytesParsed += 1;
     			if (curSize == 0) {
     				break;
     			}
-
-    			// Get chars of label
-    			*bytesReceived += recvNumBytes(buf + *bytesReceived, curSize, server);
+    			*bytesParsed += curSize;
     		}
 
     		// Populate label
-    		int labelSize = *bytesReceived - startPos;
+    		int labelSize = *bytesParsed - startPos;
     		newMsg->qname = (uint8_t *)malloc(labelSize);
     		memcpy(newMsg->qname, start, labelSize);
 
     		// Populate type
-    		int typeSize = sizeof(RR_TYPE);
-    		*bytesReceived += recvNumBytes(buf + *bytesReceived, typeSize, server);
-    		newMsg->qtype = getRrType(buf + *bytesReceived - typeSize);
+    		newMsg->qtype = getRrType(buf + *bytesParsed);
+    		*bytesParsed += sizeof(RR_TYPE);
 
     		// Populate class
-    		int classSize = sizeof(QCLASS);
-    		*bytesReceived += recvNumBytes(buf + *bytesReceived, classSize, server);
-    		newMsg->qclass = getClassType(buf + *bytesReceived - classSize);
+    		newMsg->qclass = getClassType(buf + *bytesParsed);
+    		*bytesParsed += sizeof(QCLASS);
+
+    		// Add to parent structure
     		*((*question) + i) = *newMsg;
     	}
     }
 }
 
-void getResourceRecord(struct MESSAGE_RESOURCE_RECORD** record, int count, int *bytesReceived, char* buf, struct sockaddr_in *server) {
+void getResourceRecord(struct MESSAGE_RESOURCE_RECORD** record, int count, int *bytesParsed, char* buf) {
     if (count > 0) {
     	*record = (struct MESSAGE_RESOURCE_RECORD*) malloc(sizeof(struct MESSAGE_RESOURCE_RECORD)* count);
     	int i = 0;
     	for (i = 0; i < count; i++) {
     		struct MESSAGE_RESOURCE_RECORD *newRecord = (struct MESSAGE_RESOURCE_RECORD*) malloc(sizeof(struct MESSAGE_RESOURCE_RECORD));
-    		char* start = buf + *bytesReceived;
-    		int startPos = *bytesReceived;
+    		char* start = buf + *bytesParsed;
+    		int startPos = *bytesParsed;
     		while (1) {
     			//TODO: Handle compression
-    			*bytesReceived += recvNumBytes(buf + *bytesReceived, 1, server);
     			//Get size of label
-    			uint8_t curSize = (uint8_t) *(buf + *bytesReceived - 1);
+    			uint8_t curSize = (uint8_t) *(buf + *bytesParsed);
+    			*bytesParsed += 1;
     			if (curSize == 0) {
     				break;
     			}
 
     			// Get chars of label
-    			*bytesReceived += recvNumBytes(buf + *bytesReceived, curSize, server);
+    			*bytesParsed += curSize;
     		}
 
     		// Populate name
-    		int labelSize = *bytesReceived - startPos;
+    		int labelSize = *bytesParsed - startPos;
     		newRecord->name = (uint8_t *)malloc(labelSize);
     		memcpy(newRecord->name, start, labelSize);
 
     		// Populate type
-    		int typeSize = sizeof(RR_TYPE);
-    		*bytesReceived += recvNumBytes(buf + *bytesReceived, typeSize, server);
-    		newRecord->type = getRrType(buf + *bytesReceived - typeSize);
+    		newRecord->type = getRrType(buf + *bytesParsed);
+    		*bytesParsed += sizeof(RR_TYPE);
 
     		// Populate class
-    		int classSize = sizeof(QCLASS);
-    		*bytesReceived += recvNumBytes(buf + *bytesReceived, classSize, server);
-    		newRecord->class = getClassType(buf + *bytesReceived - classSize);
+    		newRecord->class = getClassType(buf + *bytesParsed);
+    		*bytesParsed += sizeof(QCLASS);
 
     		// Populate TTL
-    		int ttlSize = sizeof(uint32_t);
-    		*bytesReceived += recvNumBytes(buf + *bytesReceived, ttlSize, server);
-    		newRecord->ttl = getUint32(buf + *bytesReceived - ttlSize);
+    		newRecord->ttl = getUint32(buf + *bytesParsed);
+    		*bytesParsed += sizeof(uint32_t);
 
     		// Populate RD Length
-    		int rdLenSize = sizeof(uint16_t);
-    		*bytesReceived += recvNumBytes(buf + *bytesReceived, rdLenSize, server);
-    		newRecord->rdlength = getUint16(buf + *bytesReceived - rdLenSize);
+    		newRecord->rdlength = getUint16(buf + *bytesParsed);
+    		*bytesParsed += sizeof(uint16_t);
 
     		// Populate RD Data
-    		startPos = *bytesReceived;
-    		*bytesReceived += recvNumBytes(buf + *bytesReceived, newRecord->rdlength, server);
     		newRecord->rd_data = malloc(newRecord->rdlength);
-    		memcpy(newRecord->rd_data, buf + *bytesReceived - startPos, newRecord->rdlength);
+    		memcpy(newRecord->rd_data, buf + *bytesParsed, newRecord->rdlength);
+    		*bytesParsed += newRecord->rdlength;
 
     		*((*record) + i) = *newRecord;
     	}
@@ -472,16 +466,15 @@ void queryForNameAt(char* name, char* root_name) {
     }
 
     //SETUP a good message header for testing. 
-    printf("Testing send\n");
-
+    printf("Sending message.\n");
     sendDnsMessage(&test_message, &server);
-
-    fprintf(stderr, "TEST\n");
     printf("done sending... wait for reply!\n");
+
     char* data = malloc(sizeof(char) * MAX_UDP_SIZE);
     socklen_t recvLen;
-    int bytesReceived = recvfrom(sockfd, data, sizeof(struct MESSAGE_HEADER), 0, (struct sockaddr*) (&(server)), &recvLen);
-    fprintf(stderr, "Received %d\n", bytesReceived);
+    int bytesReceived = recvfrom(sockfd, data, MAX_UDP_SIZE, 0, (struct sockaddr*) (&(server)), &recvLen);
+    int bytesParsed = 0;
+    //int bytesReceived = recvNumBytes(data,sizeof(struct MESSAGE_HEADER), &server);
 
     struct DNS_MESSAGE* response = (struct DNS_MESSAGE*) malloc(sizeof(struct DNS_MESSAGE));
     if (bytesReceived >= sizeof(struct MESSAGE_HEADER)) {
@@ -489,25 +482,25 @@ void queryForNameAt(char* name, char* root_name) {
     	response->header.id = ntohs(response->header.id);
     	response->header.description = ntohs(response->header.description);
     	printf("Id: %u\n", response->header.id);
+    	bytesParsed += sizeof(struct MESSAGE_HEADER);
     }
-    fprintf(stderr, "TEST1\n");
     struct MESSAGE_HEADER_EXT* ret = malloc(sizeof(struct MESSAGE_HEADER_EXT));
     unpackExtendedMessageHeader(&(response->header), ret);
 
     // Always failing this for some reason, maybe an error code doesn't count as a response?
-    /*if (ret->description.qr_type == DNS_QR_TYPE_QUERY) {
+    if (ret->description.qr_type == DNS_QR_TYPE_QUERY) {
     	fprintf(stderr, "Expected a response, received a query. Aborting.\n");
     	exit(1);
-    }*/
+    }
 
-    fprintf(stderr, "Fetcing response question.\n");
-    getQuestion(&response->question, ret->question_count, &bytesReceived, data, &server);
-    fprintf(stderr, "Fetcing response answer.\n");
-    getResourceRecord(&response->answer, ret->answer_count, &bytesReceived, data, &server);
-    fprintf(stderr, "Fetcing response authority.\n");
-    getResourceRecord(&response->authority, ret->nameserver_count, &bytesReceived, data, &server);
-    fprintf(stderr, "Fetcing response additional.\n");
-    getResourceRecord(&response->additional, ret->additional_count, &bytesReceived, data, &server);
+    fprintf(stderr, "Fetching response question.\n");
+    getQuestion(&response->question, ret->question_count, &bytesParsed, data);
+    fprintf(stderr, "Fetching response answer.\n");
+    getResourceRecord(&response->answer, ret->answer_count, &bytesParsed, data);
+    fprintf(stderr, "Fetching response authority.\n");
+    getResourceRecord(&response->authority, ret->nameserver_count, &bytesParsed, data);
+    fprintf(stderr, "Fetching response additional.\n");
+    getResourceRecord(&response->additional, ret->additional_count, &bytesParsed, data);
 
     printf("Z = %d \n(Should be 0)\n", ret->description.Z);
     printf("respcode = %d \n(Should be error:1)\n", ret->description.resp_code);
