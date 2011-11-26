@@ -40,7 +40,6 @@ char* ROOT_IP[14] = {
 };
 
 int sockfd;
-struct sockaddr_in server;
 socklen_t server_size;
 int cur_root_server = 0;
 
@@ -137,14 +136,14 @@ void repackExtendedMessageHeader(struct MESSAGE_HEADER_EXT* header,
             & header->description.resp_code;
 }
 
-void sendNumBytes(void* data, int size) {
+void sendNumBytes(void* data, int size, struct sockaddr_in* server) {
 	int bytesSent = 0;
 	char ip[INET_ADDRSTRLEN];
-	inet_ntop(AF_INET, (&server.sin_addr), ip, INET_ADDRSTRLEN);
+	inet_ntop(AF_INET, (&(server->sin_addr)), ip, INET_ADDRSTRLEN);
 
     while (bytesSent < size) {
     	fprintf(stderr, "Sending %d bytes to %s\n", size, ip);
-    	bytesSent += sendto(sockfd, data + bytesSent, size - bytesSent, 0, (struct sockaddr*)(&server), server_size);
+    	bytesSent += sendto(sockfd, data + bytesSent, size - bytesSent, 0, (struct sockaddr*)(server), server_size);
     	fprintf(stderr, "Sent %d bytes\n", bytesSent);
 
     	if (bytesSent < 0) {
@@ -154,65 +153,300 @@ void sendNumBytes(void* data, int size) {
     }
 }
 
-void appendToBuffer(char* buf, void* data, int size, int* total_size) {
+int recvNumBytes(char* buf, int size, struct sockaddr_in* server) {
+	int bytesReceived = 0;
+	char ip[INET_ADDRSTRLEN];
+	inet_ntop(AF_INET, (&(server->sin_addr)), ip, INET_ADDRSTRLEN);
+
+    while (bytesReceived < size) {
+    	fprintf(stderr, "Receiving %d bytes from %s\n", size - bytesReceived, ip);
+    	bytesReceived += recvfrom(sockfd, buf + bytesReceived, size - bytesReceived, 0, (struct sockaddr*)(server), &server_size);
+    	fprintf(stderr, "Received %d bytes\n", bytesReceived);
+
+    	if (bytesReceived < 0) {
+    		fprintf(stderr, "Failed to receive. %s\n", strerror(errno));
+    		//TODO: should this actually exit?
+    		exit(1);
+    	}
+    }
+
+    return bytesReceived;
+}
+
+void appendToBuffer(char** buf, void* data, int size, int* total_size) {
 	if (*total_size + size > MAX_UDP_SIZE) {
 		fprintf(stderr, "Packet too large. Aborting.");
 		exit(1);
 	}
 
-	memcpy(buf, data, size);
-	buf += size;
+	fprintf(stderr, "Adding to buffer %d bytes\n", size);
+	memcpy(*buf, data, size);
+	(*buf) += size;
 	*total_size += size;
 }
 
-void sendDnsMessage(struct DNS_MESSAGE* message) {
+int labelLen(uint8_t* label) {
+	int len = 0;
+	uint8_t* itr = label;
+	while (1) {
+		uint8_t size = *itr;
+		if (size == 0) {
+			// Add the last zero
+			len += 1;
+			break;
+		}
+
+		len += size + 1;
+		itr += size + 1;
+	}
+
+	return len;
+}
+
+void sendDnsMessage(struct DNS_MESSAGE* message, struct sockaddr_in* server) {
 	int packet_size = 0;
 	char* buf = (char*) malloc(MAX_UDP_SIZE);
 	char* itr = buf;
+	printf("packet size: %d\n", packet_size);
 
 	//Send Header
-	appendToBuffer(itr, (&message->header), sizeof(struct MESSAGE_HEADER), &packet_size);
+	appendToBuffer(&itr, (&(message->header)), sizeof(struct MESSAGE_HEADER), &packet_size);
 
     int i = 0;
     //Send Question
+    printf("Found %d questions.\n", ntohs(message->header.question_count));
     for (i = 0; i < ntohs(message->header.question_count); i++) {
     	struct MESSAGE_QUESTION* cur = message->question + i;
-    	appendToBuffer(itr, cur->qname, strlen(cur->qname), &packet_size);
-    	RR_TYPE type = htons(cur->qtype);
-    	QCLASS class = htons(cur->qclass);
-    	appendToBuffer(itr, &type, sizeof(type), &packet_size);
-    	appendToBuffer(itr, &class, sizeof(class), &packet_size);
+    	// Append name
+    	appendToBuffer(&itr, cur->qname, labelLen(cur->qname), &packet_size);
+    	// Append type
+    	printf("Appending qtype: %02x\n", ntohs(cur->qtype));
+    	appendToBuffer(&itr, &(cur->qtype), sizeof(cur->qtype), &packet_size);
+    	// Append class
+    	printf("Appending qclass: %02x\n", ntohs(cur->qclass));
+    	appendToBuffer(&itr, &(cur->qclass), sizeof(cur->qclass), &packet_size);
     }
 
-    sendNumBytes(buf, packet_size);
+    printf("finished packet size: %d\n", packet_size);
+    sendNumBytes(buf, packet_size, server);
 }
 
 char* getNextRootServer() {
 	return ROOT_IP[cur_root_server++];
 }
 
-int main(int argc, char *argv[]) {
-    //Take the input string, pass to the parseLabel method.
-    char name[20] = "www.google.com"; //For now, simply use a hard-coded domain.
-    //Grabbed from A1 udp client
-    char* root_name = getNextRootServer();
-    server_size = sizeof(struct sockaddr_in);
+// str must be at least 256 char long as names are a maximum of 255 octets (including label length)
+void createCharFromLabel(uint8_t* label, char* str) {
+    uint8_t* itr = label;
+    int i = 0;
+    while(1) {
+        uint8_t size = (uint8_t) *itr;
 
-    // As per man page, set protocol to 0 (generic IP)
-	if ((sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
-		fprintf(stderr, "Failed to create socket.");
-	}
+        if (size == 0) {
+            str[i] = '\0';
+            break;
+        }
+
+        itr++;
+        int curI = i;
+        for (;i < curI + size; i++) {
+            str[i] = (char) *itr;
+            itr++;
+        }
+        str[i++] = '.';
+    }
+}
+
+// A label can be a max of 63 octets.
+// Str is expected to be a full host name, meaning the last char should be '.'
+void createLabelFromChar(char* str, uint8_t** label) {
+    char cur = '\0';
+    uint8_t size = 0;
+    int strLen = strlen(str);
+    uint8_t counter = 0;
+
+    // Create memory for the labels
+    // Breakdown:
+    // each '.' is replaced with a string length octet in the label
+    // the '\0' is replaced with the 0 length size
+    (*label) = (uint8_t*) malloc(sizeof(uint8_t) * strLen);
+
+    uint8_t* itr = (*label);
+
+    //Initialize first label length.
+    (*itr) = 0;
+    itr++;
+    cur = *(str + counter);
+    while (1) {
+        if (cur == '\0') {
+            // Go back and set size
+            (*(itr-size - 1)) = size;
+            // Add zero length for label termination
+            *(itr++) = 0;
+            break;
+        }
+
+        if (cur == '.') {
+            // Assign size now that it's known
+            (*(itr - size - 1)) = size;
+            // Move to next character position
+            itr++;
+            // Reset size counter
+            size = 0;
+            counter++;
+            cur = *(str + counter);
+            continue;
+
+        }
+
+        size++;
+        counter++;
+        //Assign char to position.
+        (*itr) = (uint8_t) cur;
+
+        //Increment pointer to next position
+        itr++;
+
+        //Get next char in str.
+        cur = *(str + counter);
+    }
+}
+
+RR_TYPE getRrType(char* buf) {
+	RR_TYPE type;
+	memcpy(&type, buf, sizeof(RR_TYPE));
+	return ntohs(type);
+}
+
+QCLASS getClassType(char* buf) {
+	QCLASS class;
+	memcpy(&class, buf, sizeof(QCLASS));
+	return ntohs(class);
+}
+
+uint32_t getUint32(char* buf) {
+	uint32_t ret;
+	memcpy(&ret, buf, sizeof(uint32_t));
+	return ntohl(ret);
+}
+
+uint16_t getUint16(char* buf) {
+	uint16_t ret;
+	memcpy(&ret, buf, sizeof(uint16_t));
+	return ntohs(ret);
+}
+
+void getQuestion(struct MESSAGE_QUESTION** question, int count, int *bytesReceived, char* buf, struct sockaddr_in *server) {
+    if (count > 0) {
+    	*question = (struct MESSAGE_QUESTION*)malloc(sizeof(struct MESSAGE_QUESTION) * count);
+    	int i = 0;
+    	for (i = 0; i < count; i++) {
+    		struct MESSAGE_QUESTION *newMsg = (struct MESSAGE_QUESTION*) malloc(sizeof(struct MESSAGE_QUESTION));
+    		char* start = buf + *bytesReceived;
+    		int startPos = *bytesReceived;
+    		while (1) {
+    			//TODO: Handle compression
+    			*bytesReceived += recvNumBytes(buf + *bytesReceived, 1, server);
+    			//Get size of label
+    			uint8_t curSize = (uint8_t) *(buf + *bytesReceived - 1);
+    			if (curSize == 0) {
+    				break;
+    			}
+
+    			// Get chars of label
+    			*bytesReceived += recvNumBytes(buf + *bytesReceived, curSize, server);
+    		}
+
+    		// Populate label
+    		int labelSize = *bytesReceived - startPos;
+    		newMsg->qname = (uint8_t *)malloc(labelSize);
+    		memcpy(newMsg->qname, start, labelSize);
+
+    		// Populate type
+    		int typeSize = sizeof(RR_TYPE);
+    		*bytesReceived += recvNumBytes(buf + *bytesReceived, typeSize, server);
+    		newMsg->qtype = getRrType(buf + *bytesReceived - typeSize);
+
+    		// Populate class
+    		int classSize = sizeof(QCLASS);
+    		*bytesReceived += recvNumBytes(buf + *bytesReceived, classSize, server);
+    		newMsg->qclass = getClassType(buf + *bytesReceived - classSize);
+    		*((*question) + i) = *newMsg;
+    	}
+    }
+}
+
+void getResourceRecord(struct MESSAGE_RESOURCE_RECORD** record, int count, int *bytesReceived, char* buf, struct sockaddr_in *server) {
+    if (count > 0) {
+    	*record = (struct MESSAGE_RESOURCE_RECORD*) malloc(sizeof(struct MESSAGE_RESOURCE_RECORD)* count);
+    	int i = 0;
+    	for (i = 0; i < count; i++) {
+    		struct MESSAGE_RESOURCE_RECORD *newRecord = (struct MESSAGE_RESOURCE_RECORD*) malloc(sizeof(struct MESSAGE_RESOURCE_RECORD));
+    		char* start = buf + *bytesReceived;
+    		int startPos = *bytesReceived;
+    		while (1) {
+    			//TODO: Handle compression
+    			*bytesReceived += recvNumBytes(buf + *bytesReceived, 1, server);
+    			//Get size of label
+    			uint8_t curSize = (uint8_t) *(buf + *bytesReceived - 1);
+    			if (curSize == 0) {
+    				break;
+    			}
+
+    			// Get chars of label
+    			*bytesReceived += recvNumBytes(buf + *bytesReceived, curSize, server);
+    		}
+
+    		// Populate name
+    		int labelSize = *bytesReceived - startPos;
+    		newRecord->name = (uint8_t *)malloc(labelSize);
+    		memcpy(newRecord->name, start, labelSize);
+
+    		// Populate type
+    		int typeSize = sizeof(RR_TYPE);
+    		*bytesReceived += recvNumBytes(buf + *bytesReceived, typeSize, server);
+    		newRecord->type = getRrType(buf + *bytesReceived - typeSize);
+
+    		// Populate class
+    		int classSize = sizeof(QCLASS);
+    		*bytesReceived += recvNumBytes(buf + *bytesReceived, classSize, server);
+    		newRecord->class = getClassType(buf + *bytesReceived - classSize);
+
+    		// Populate TTL
+    		int ttlSize = sizeof(uint32_t);
+    		*bytesReceived += recvNumBytes(buf + *bytesReceived, ttlSize, server);
+    		newRecord->ttl = getUint32(buf + *bytesReceived - ttlSize);
+
+    		// Populate RD Length
+    		int rdLenSize = sizeof(uint16_t);
+    		*bytesReceived += recvNumBytes(buf + *bytesReceived, rdLenSize, server);
+    		newRecord->rdlength = getUint16(buf + *bytesReceived - rdLenSize);
+
+    		// Populate RD Data
+    		startPos = *bytesReceived;
+    		*bytesReceived += recvNumBytes(buf + *bytesReceived, newRecord->rdlength, server);
+    		newRecord->rd_data = malloc(newRecord->rdlength);
+    		memcpy(newRecord->rd_data, buf + *bytesReceived - startPos, newRecord->rdlength);
+
+    		*((*record) + i) = *newRecord;
+    	}
+    }
+}
+
+void queryForNameAt(char* name, char* root_name) {
 
     struct DNS_MESSAGE test_message;
     test_message.header.id = htons(10);
-    test_message.header.additional_count = 0;
-    test_message.header.answer_count = 0;
-    test_message.header.description = 0;
-    test_message.header.nameserver_count = 0;
+    test_message.header.additional_count = htons(0);
+    test_message.header.answer_count = htons(0);
+    test_message.header.description = htons(0);
+    test_message.header.nameserver_count = htons(0);
     test_message.header.question_count = htons(1);
 
     struct MESSAGE_QUESTION* question = (struct MESSAGE_QUESTION*) malloc(sizeof(struct MESSAGE_QUESTION));
-    question->qname = name;
+    uint8_t* name_label;
+    createLabelFromChar(name, &name_label);
+    question->qname = name_label;
     question->qclass = htons(MESSAGE_QCLASS_IN);
     question->qtype = htons(MESSAGE_QTYPE_AAAA);
 
@@ -220,6 +454,8 @@ int main(int argc, char *argv[]) {
 
     fprintf(stderr, "Trying DNS server %s\n", root_name);
 
+    // Setup server to be queried
+    struct sockaddr_in server;
     server.sin_family = AF_INET;
     server.sin_len = 0;
     server.sin_port = htons(DNS_PORT);
@@ -238,7 +474,7 @@ int main(int argc, char *argv[]) {
     //SETUP a good message header for testing. 
     printf("Testing send\n");
 
-    sendDnsMessage(&test_message);
+    sendDnsMessage(&test_message, &server);
 
     fprintf(stderr, "TEST\n");
     printf("done sending... wait for reply!\n");
@@ -264,20 +500,53 @@ int main(int argc, char *argv[]) {
     	exit(1);
     }*/
 
-    if (response->header.question_count > 0) {
-    	int i = 0;
-    	for (i = 0; i < ntohs(response->header.question_count); i++) {
-    		int labelCount = 0;
-
-    		while (1) {
-
-    			bytesReceived += recvfrom(sockfd, data + bytesReceived, 1, 0, (struct sockaddr*) (&(server)), &server_size);
-    		}
-    	}
-    }
+    fprintf(stderr, "Fetcing response question.\n");
+    getQuestion(&response->question, ret->question_count, &bytesReceived, data, &server);
+    fprintf(stderr, "Fetcing response answer.\n");
+    getResourceRecord(&response->answer, ret->answer_count, &bytesReceived, data, &server);
+    fprintf(stderr, "Fetcing response authority.\n");
+    getResourceRecord(&response->authority, ret->nameserver_count, &bytesReceived, data, &server);
+    fprintf(stderr, "Fetcing response additional.\n");
+    getResourceRecord(&response->additional, ret->additional_count, &bytesReceived, data, &server);
 
     printf("Z = %d \n(Should be 0)\n", ret->description.Z);
     printf("respcode = %d \n(Should be error:1)\n", ret->description.resp_code);
 
     close(sockfd);
+}
+
+void init() {
+    server_size = sizeof(struct sockaddr_in);
+
+    // As per man page, set protocol to 0 (generic IP)
+	if ((sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
+		fprintf(stderr, "Failed to create socket.");
+		exit(1);
+	}
+}
+
+void testLabelSerdes(char* name) {
+    uint8_t* label;
+    createLabelFromChar(name, &label);
+    int i = 0;
+    int len = strlen(name);
+    for (; i <= len; i++) {
+        printf("%02x ", label[i]);
+    }
+    printf("\n");
+
+    char str[255];
+    createCharFromLabel(label, str);
+    printf("%s\n", str);
+}
+
+int main(int argc, char *argv[]) {
+    //Take the input string, pass to the parseLabel method.
+    char name[20] = "www.google.com."; //For now, simply use a hard-coded domain.
+    //Grabbed from A1 udp client
+    char* root_name = getNextRootServer();
+
+    init();
+    queryForNameAt(name, root_name);
+    //testLabelSerdes(name);
 }

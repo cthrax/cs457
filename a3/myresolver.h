@@ -74,13 +74,13 @@ struct MESSAGE_HEADER {
 }__attribute__((__packed__));
 
 struct MESSAGE_QUESTION {
-    char* qname; //A list of labels, must be parsed separately into struct.
+    uint8_t* qname; //A list of labels, must be parsed separately into struct.
     RR_TYPE qtype;
     QCLASS qclass;
 }__attribute__((__packed__));
 
 struct MESSAGE_RESOURCE_RECORD {
-    char* name; //A list of labels, must be parsed into struct separately.
+    uint8_t* name; //A list of labels, must be parsed into struct separately.
     RR_TYPE type;
     QCLASS class;
     uint32_t ttl;
