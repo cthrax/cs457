@@ -396,8 +396,6 @@ void getResourceRecord(struct MESSAGE_RESOURCE_RECORD** record, int count, int *
     		// The total number of pointers has ptrSize bytes
     		int labelSize = ((*bytesParsed - startPos) - (ptrCount * 2)) + ptrSize;
     		newRecord->name = (uint8_t *) malloc(labelSize); copyLabel(buf, newRecord->name, startPos, ptrs, ptrCount, ptrSize, labelSize);
-    		char t[1024];
-    		createCharFromLabel(newRecord->name, t);
 
     		// Populate type
     		newRecord->type = getRrType(buf + *bytesParsed);
@@ -534,6 +532,7 @@ void queryForNameAt(char* name, char* root_name) {
     struct MESSAGE_HEADER_EXT ext;
     unpackExtendedMessageHeader(&(test_message.header), &ext);
     ext.description.qr_type = DNS_QR_TYPE_QUERY;
+    //ext.description.recurse_desired = DNS_RD_TRUE;
     repackExtendedMessageHeader(&ext, &(test_message.header));
 
     test_message.question = (struct MESSAGE_QUESTION*) malloc(sizeof(struct MESSAGE_QUESTION));
