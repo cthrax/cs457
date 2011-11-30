@@ -49,6 +49,24 @@ struct PTR_VAL {
     int start;
 };
 
+void getIPV4addr(uint8_t* in, char* out)
+{
+   uint8_t* ptr = in;
+   uint8_t one = *ptr;
+   ptr ++;
+   uint8_t two = *ptr;
+   ptr ++;
+   uint8_t three = *ptr;
+   ptr ++;
+   uint8_t four = *ptr;
+   sprintf(out, "%d.%d.%d.%d", (int)four,(int)one,(int)three,(int)two);
+   //This method returns valid-looking IPV4 addresses, BUT, they simply don't work.
+   //four.three.one.two *seems* to be the correct answer as it actually will allow me to get ANSWER sections.
+   //I have *no* idea why this is so, but there you have it.
+   // 46.1.192.102 actually responded, and gave an answer to google.com. . . 
+   
+}
+
 char* getNextRootServer() {
     //TODO: Need some protection for going out of bounds
     //TODO: Possibly use this function for any list of IP addresses to try
@@ -494,7 +512,7 @@ void printRr(struct MESSAGE_RESOURCE_RECORD* rr, uint16_t count, char* title) {
         char rrType[10];
         createCharFromLabel(cur->name, name);
         getRrTypeStr(ntohs(cur->type), rrType);
-        printf("%s %u %s %s %u\n", name, ntohl(cur->ttl), "IN", rrType, ntohs(cur->rdlength));
+        printf("%s %u %s %s %u \n", name, ntohl(cur->ttl), "IN", rrType, ntohs(cur->rdlength));
     }
 }
 
@@ -519,7 +537,7 @@ void printDnsMessage(struct DNS_MESSAGE* message) {
     printf("=============END=====================\n");
 }
 
-void queryForNameAt(char* name, char* root_name) {
+int queryForNameAt(char* name, char* root_name) {
 
     struct DNS_MESSAGE test_message;
     test_message.header.id = htons(10);
@@ -549,7 +567,7 @@ void queryForNameAt(char* name, char* root_name) {
     // Setup server to be queried
     struct sockaddr_in server;
     server.sin_family = AF_INET;
-    server.sin_len = 0;
+   // server.sin_len = 0;  //My system gives an error that sockaddr_in has no member by this name...
     server.sin_port = htons(DNS_PORT);
     // Clear out the data.
     memset(server.sin_zero, '\0', sizeof(server.sin_zero));
@@ -574,11 +592,21 @@ void queryForNameAt(char* name, char* root_name) {
 
     // We'll see if it's the case, but I read online that UDP packets expect to send the whole packet in one go
     // I tried doing multiple reads and that fails.
+    
+    //Setup for client timeout
+	struct timeval  t;
+	t.tv_sec  = 5;
+	t.tv_usec = 0;
+	if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &t, sizeof(t)) < 0) {
+		fprintf(stderr, "Error setting timeout condition.\n");
+		return 8;
+	}
     int bytesReceived = recvfrom(sockfd, data, MAX_UDP_SIZE, 0, (struct sockaddr*) (&(server)), &recvLen);
     if (bytesReceived < 0) {
         fprintf(stderr, "Error receiving packet: %s\n", strerror(errno));
         //TODO: Should we exit here, or is where we re-initiate the loop with the next server?
-        exit(1);
+        // This is where we "Return False" (1) and keep the loop going. Yay recursion.
+        return 1;
     }
 
     int bytesParsed = 0;
@@ -602,13 +630,59 @@ void queryForNameAt(char* name, char* root_name) {
     getResourceRecord(&response->additional, ret->additional_count, &bytesParsed, data);
 
     printDnsMessage(response);
-
+    if(ret->answer_count > 0)
+    {
+       fprintf(stderr, "****WE GOT AN ANSWER!!****"\n);
+       return 0;
+    }
     if (ret->description.qr_type == DNS_QR_TYPE_QUERY) {
     	fprintf(stderr, "Expected a response, received a query. Aborting.\n");
     	exit(1);
     }
-
+    //Jacob's Mess:
+    struct MESSAGE_RESOURCE_RECORD *nxt = response->authority;
+    int count = 0;
+    while(ntohs(nxt->rdlength) != 4 && count < ret->nameserver_count)
+    {
+       nxt++;//scan until we get a 4octet IP address. 
+       count++;//seg fault protection
+    }
+    char next[20];
+    getIPV4addr((uint8_t*)nxt->rd_data, next);
+    if(ret->answer_count == 0 && ret->nameserver_count > 0)//We've been delegated to another authority.
+    {
+    	//fprintf(stderr, "We should follow this redirect: %s \n", next);
+    	fprintf(stderr, "Following a redirect\n");
+    	//close(sockfd);
+    	int answer = queryForNameAt(name, next);
+    	while(answer != 0)
+    	{
+    	   nxt++;
+    	   while(ntohs(nxt->rdlength) != 4 && count < ret->nameserver_count)
+    	   {
+    	      nxt++;
+    	      count++;
+    	   }
+    	   if(count < ret->nameserver_count)
+    	   {
+    	      getIPV4addr((uint8_t*)nxt->rd_data, next);
+    	      answer = queryForNameAt(name, next);
+    	   }
+    	   else
+    	   {
+    	      return 1;
+    	      close(sockfd);
+    	   }
+    	}
+    }
+    else if(ret->answer_count > 0)
+    {
+       fprintf(stderr,"****WE GOT AN ANSWER!!****");
+       close(sockfd);
+       return 0;
+    }
     close(sockfd);
+    return 1;
 }
 
 void init() {
@@ -638,7 +712,7 @@ void testLabelSerdes(char* name) {
 
 int main(int argc, char *argv[]) {
     //Take the input string, pass to the parseLabel method.
-    char name[20] = "www.google.com."; //For now, simply use a hard-coded domain.
+    char name[20] = "www.google.com"; //For now, simply use a hard-coded domain.
     //Grabbed from A1 udp client
     char* root_name = getNextRootServer();
 
