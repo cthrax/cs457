@@ -51,7 +51,10 @@ struct PTR_VAL {
 
 void getIPV4addr(uint8_t* in, char* out)
 {
-   uint8_t* ptr = in;
+    uint32_t addr = ntohl(in);
+   inet_ntop(AF_INET, &addr, out, INET_ADDRSTRLEN);
+   printf("%s\n", out);
+   /*uint8_t* ptr = in;
    uint8_t one = *ptr;
    ptr ++;
    uint8_t two = *ptr;
@@ -59,7 +62,7 @@ void getIPV4addr(uint8_t* in, char* out)
    uint8_t three = *ptr;
    ptr ++;
    uint8_t four = *ptr;
-   sprintf(out, "%d.%d.%d.%d", (int)four,(int)one,(int)three,(int)two);
+   sprintf(out, "%d.%d.%d.%d", (int)one,(int)three,(int)two, (int)four);*/
    //This method returns valid-looking IPV4 addresses, BUT, they simply don't work.
    //four.three.one.two *seems* to be the correct answer as it actually will allow me to get ANSWER sections.
    //I have *no* idea why this is so, but there you have it.
@@ -632,7 +635,7 @@ int queryForNameAt(char* name, char* root_name) {
     printDnsMessage(response);
     if(ret->answer_count > 0)
     {
-       fprintf(stderr, "****WE GOT AN ANSWER!!****"\n);
+       fprintf(stderr, "****WE GOT AN ANSWER!!****\n");
        return 0;
     }
     if (ret->description.qr_type == DNS_QR_TYPE_QUERY) {
@@ -640,15 +643,30 @@ int queryForNameAt(char* name, char* root_name) {
     	exit(1);
     }
     //Jacob's Mess:
-    struct MESSAGE_RESOURCE_RECORD *nxt = response->authority;
-    int count = 0;
-    while(ntohs(nxt->rdlength) != 4 && count < ret->nameserver_count)
-    {
-       nxt++;//scan until we get a 4octet IP address. 
-       count++;//seg fault protection
+
+    uint32_t ip = 0u;
+    struct MESSAGE_RESOURCE_RECORD *nxt;
+    // We have a definitive answer, let's print stuff out
+    if (ret->description.auth_answer == DNS_AA_TRUE) {
+        printf("We got a definitive answer.\n");
+        // do fun printing stuff
+    } else if (response->header.additional_count > 0) {
+        printf("We have addresses resolved.\n");
+        // Let's hope that we got some IP addresses resolved for us.
+        nxt = response->additional;
+        if (nxt->type == MESSAGE_QTYPE_A) {
+            ip = ntohl(nxt->rd_data);
+        }
+    } else {
+        printf("We need to resolve addresses.\n");
+        //TODO: need to parse rdata of authority section
     }
-    char next[20];
-    getIPV4addr((uint8_t*)nxt->rd_data, next);
+
+    int count = 0;
+
+    char next[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &ip, next, INET_ADDRSTRLEN);
+
     if(ret->answer_count == 0 && ret->nameserver_count > 0)//We've been delegated to another authority.
     {
     	//fprintf(stderr, "We should follow this redirect: %s \n", next);
@@ -658,11 +676,6 @@ int queryForNameAt(char* name, char* root_name) {
     	while(answer != 0)
     	{
     	   nxt++;
-    	   while(ntohs(nxt->rdlength) != 4 && count < ret->nameserver_count)
-    	   {
-    	      nxt++;
-    	      count++;
-    	   }
     	   if(count < ret->nameserver_count)
     	   {
     	      getIPV4addr((uint8_t*)nxt->rd_data, next);
