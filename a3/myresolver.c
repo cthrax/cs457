@@ -272,7 +272,8 @@ uint16_t getUint16(char* buf) {
 	return ret;
 }
 
-void parseLabel(char* buf, int* bytesParsed, struct PTR_VAL* ptrs, int* ptr_count, int* ptr_size) {
+void parseLabel(char* buf, int* bytesParsed, struct PTR_VAL* ptrs, int* ptr_count, int* ptr_size, int recurse) {
+    int start = *bytesParsed;
     while (1) {
         //Get size of label
         uint8_t curSize = (uint8_t) *(buf + *bytesParsed);
@@ -284,24 +285,23 @@ void parseLabel(char* buf, int* bytesParsed, struct PTR_VAL* ptrs, int* ptr_coun
             ptr = ntohs(ptr);
             ptr = ptr & 0x3FFF;
 
-            //Pointer points to just before the start.
             int end = ptr;
-            int startPtrCnt = *ptr_count;
-
-            //XXX: There might be a bug here if we go recursive, but I need an example to verify.
-            // It might not be worth the effort, because it's unclear if recursive compression occurs, though it most likely does.
-            parseLabel(buf, &end, ptrs, ptr_count, ptr_size);
-
             // Save the start of the pointer so that the pointer is removed from the copy
             struct PTR_VAL* cur = ptrs + *ptr_count;
             cur->pointerStart = *bytesParsed;
-            cur->len = end - ptr;
             cur->start = ptr;
+            (*ptr_count)++;
+
+            //XXX: There might be a bug here if we go recursive, but I need an example to verify.
+            parseLabel(buf, &end, ptrs, ptr_count, ptr_size, 1);
+
+            cur->len = end - ptr;
 
             *ptr_size += end - ptr;
-            (*ptr_count)++;
             // We parsed the pointer
-            *bytesParsed += 2 * (*ptr_count - startPtrCnt);
+            if (recurse == 0) {
+                *bytesParsed += 2;
+            }
 
             // By definition, a pointer is the end.
             break;
@@ -323,12 +323,11 @@ void copyLabel(char* buf, uint8_t* dest, int start, struct PTR_VAL* ptrs, int pt
         if (srcItr < ptrs[j].pointerStart) {
             memcpy(dest + destItr, buf + srcItr, ptrs[j].start - start);
             destItr += ptrs[j].start - srcItr;
-            srcItr += (ptrs[j].start - srcItr) + 2;
-
-        } else {
-            memcpy(dest + destItr, buf + ptrs[j].start, ptrs[j].len);
-            destItr += ptrs[j].len;
+            srcItr += (ptrs[j].start - srcItr);
         }
+
+        memcpy(dest + destItr, buf + ptrs[j].start, ptrs[j].len);
+        destItr += ptrs[j].len;
     }
 
     if (destItr < total_len) {
@@ -342,14 +341,14 @@ void getQuestion(struct MESSAGE_QUESTION** question, int count, int *bytesParsed
     	int i = 0;
     	//Names may only be max of 255 octets long, with worst case scenario being that
     	// each label is only one byte long (meaning two bytes), which is 127.5, make it safe with 128
-    	struct PTR_VAL ptrs[128];
+    	struct PTR_VAL ptrs[255];
     	for (i = 0; i < count; i++) {
     		struct MESSAGE_QUESTION *newMsg = *question + i;
     		int startPos = *bytesParsed;
     		int ptrCount = 0;
     		int ptrSize = 0;
 
-    		parseLabel(buf, bytesParsed, ptrs, &ptrCount, &ptrSize);
+    		parseLabel(buf, bytesParsed, ptrs, &ptrCount, &ptrSize, 0);
 
     		// Populate label
     		// Size breakdown:
@@ -387,7 +386,7 @@ void getResourceRecord(struct MESSAGE_RESOURCE_RECORD** record, int count, int *
     		int ptrCount = 0;
     		int ptrSize = 0;
 
-    		parseLabel(buf, bytesParsed, ptrs, &ptrCount, &ptrSize);
+    		parseLabel(buf, bytesParsed, ptrs, &ptrCount, &ptrSize, 0);
 
     		// Populate name
     		// Size breakdown:
@@ -395,7 +394,8 @@ void getResourceRecord(struct MESSAGE_RESOURCE_RECORD** record, int count, int *
     		// Each pointer has 2 bytes not copied
     		// The total number of pointers has ptrSize bytes
     		int labelSize = ((*bytesParsed - startPos) - (ptrCount * 2)) + ptrSize;
-    		newRecord->name = (uint8_t *) malloc(labelSize); copyLabel(buf, newRecord->name, startPos, ptrs, ptrCount, ptrSize, labelSize);
+    		newRecord->name = (uint8_t *) malloc(labelSize);
+    		copyLabel(buf, newRecord->name, startPos, ptrs, ptrCount, ptrSize, labelSize);
 
     		// Populate type
     		newRecord->type = getRrType(buf + *bytesParsed);
