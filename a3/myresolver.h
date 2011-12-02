@@ -7,8 +7,12 @@
 typedef uint16_t RR_TYPE;
 typedef uint16_t QCLASS;
 
-const uint16_t MAX_UDP_SIZE = 512;
+// For DNSSEC 4096 is the recommended max size.
+const uint16_t MAX_UDP_SIZE = 4096;
 const uint16_t DNS_PORT = 53;
+
+const int RET_INVALID_IP = 1;
+const int RET_INVALID_RESPONSE = 2;
 
 //QCLASS
 const QCLASS MESSAGE_QCLASS_IN = 0x0001;

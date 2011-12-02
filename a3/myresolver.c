@@ -16,13 +16,7 @@
 #include <netdb.h>
 #include <inttypes.h>
 
-//IP Addresses : 202.12.27.33
-//		 199.7.83.42
-//		 193.0.14.129
-//		 192.58.128.30
-//		 192.36.148.17
-//		 128.63.2.53
-//		 Use port 53
+const int ROOT_COUNT = 14;
 char* ROOT_IP[14] = {
 		 "198.41.0.4"    , //a
 		 "192.228.79.201", //b
@@ -73,6 +67,9 @@ void getIPV4addr(uint32_t* in, char* out)
 char* getNextRootServer() {
     //TODO: Need some protection for going out of bounds
     //TODO: Possibly use this function for any list of IP addresses to try
+    if (cur_root_server == ROOT_COUNT) {
+        return NULL;
+    }
 	return ROOT_IP[cur_root_server++];
 }
 
@@ -540,11 +537,7 @@ void printDnsMessage(struct DNS_MESSAGE* message) {
     printf("=============END=====================\n");
 }
 
-int queryForNameAt(char* name, char* root_name) {
-    
-    if(strcmp(name, "0.0.0.0") == 0)//Don't do broadcast shouts!
-        return 1;
-    
+int sendQuery(char* hostToResolve, char* dns_server, struct sockaddr_in* server) {
     struct DNS_MESSAGE test_message;
     test_message.header.id = htons(10);
     test_message.header.additional_count = htons(0);
@@ -553,51 +546,25 @@ int queryForNameAt(char* name, char* root_name) {
     test_message.header.nameserver_count = htons(0);
     test_message.header.question_count = htons(1);
 
-    struct MESSAGE_HEADER_EXT ext;
-    unpackExtendedMessageHeader(&(test_message.header), &ext);
-    ext.description.qr_type = DNS_QR_TYPE_QUERY;
-    //ext.description.recurse_desired = DNS_RD_TRUE;
-    repackExtendedMessageHeader(&ext, &(test_message.header));
-
     test_message.question = (struct MESSAGE_QUESTION*) malloc(sizeof(struct MESSAGE_QUESTION));
 
     struct MESSAGE_QUESTION* question = test_message.question;
     uint8_t* name_label;
-    createLabelFromChar(name, &name_label);
+    createLabelFromChar(hostToResolve, &name_label);
     question->qname = name_label;
     question->qclass = htons(MESSAGE_QCLASS_IN);
     question->qtype = htons(MESSAGE_QTYPE_AAAA);
 
-    fprintf(stderr, "Trying DNS server %s\n", root_name);
-
-    // Setup server to be queried
-    struct sockaddr_in server;
-    server.sin_family = AF_INET;
-   // server.sin_len = 0;  //My system gives an error that sockaddr_in has no member by this name...
-    server.sin_port = htons(DNS_PORT);
-    // Clear out the data.
-    memset(server.sin_zero, '\0', sizeof(server.sin_zero));
-    int result = inet_pton(AF_INET, root_name, &(server.sin_addr.s_addr));
-    if (result != 1) {
-    	if (result == 0) {
-    		fprintf(stderr, "Invalid IP passed in.\n");
-    	} else if (result < 0) {
-    		fprintf(stderr, "Unable to parse IP address: %s\n", strerror(errno));
-    	}
-    	exit(1);
-    }
-
-    //SETUP a good message header for testing. 
-    printf("Sending message.\n");
+    fprintf(stderr, "Trying DNS server %s\n", dns_server);
     printDnsMessage(&test_message);
-    sendDnsMessage(&test_message, &server);
+    sendDnsMessage(&test_message, server);
     printf("done sending... wait for reply!\n");
+    return 0;
+}
 
+int getResponse(struct DNS_MESSAGE* response, struct sockaddr_in* server) {
     char* data = malloc(sizeof(char) * MAX_UDP_SIZE);
     socklen_t recvLen;
-
-    // We'll see if it's the case, but I read online that UDP packets expect to send the whole packet in one go
-    // I tried doing multiple reads and that fails.
     
     //Setup for client timeout
 	struct timeval  t;
@@ -616,52 +583,81 @@ int queryForNameAt(char* name, char* root_name) {
     }
 
     int bytesParsed = 0;
-
-    struct DNS_MESSAGE* response = (struct DNS_MESSAGE*) malloc(sizeof(struct DNS_MESSAGE));
     if (bytesReceived >= sizeof(struct MESSAGE_HEADER)) {
     	memcpy(&(response->header), data, sizeof(struct MESSAGE_HEADER));
     	bytesParsed += sizeof(struct MESSAGE_HEADER);
     }
 
-    struct MESSAGE_HEADER_EXT* ret = malloc(sizeof(struct MESSAGE_HEADER_EXT));
-    unpackExtendedMessageHeader(&(response->header), ret);
+    struct MESSAGE_HEADER_EXT h;
+    unpackExtendedMessageHeader(&(response->header), &h);
 
-    fprintf(stderr, "Fetching response question. %u\n", bytesParsed);
-    getQuestion(&response->question, ret->question_count, &bytesParsed, data);
-    fprintf(stderr, "Fetching response answer. %u\n", bytesParsed);
-    getResourceRecord(&response->answer, ret->answer_count, &bytesParsed, data);
-    fprintf(stderr, "Fetching response authority. %u\n", bytesParsed);
-    getResourceRecord(&response->authority, ret->nameserver_count, &bytesParsed, data);
-    fprintf(stderr, "Fetching response additional. %u\n", bytesParsed);
-    getResourceRecord(&response->additional, ret->additional_count, &bytesParsed, data);
+    getQuestion(&(response->question), h.question_count, &bytesParsed, data);
+    getResourceRecord(&(response->answer), h.answer_count, &bytesParsed, data);
+    getResourceRecord(&(response->authority), h.nameserver_count, &bytesParsed, data);
+    getResourceRecord(&(response->additional), h.additional_count, &bytesParsed, data);
+    free(data);
+    return 0;
+}
 
-    printDnsMessage(response);
-    if(ret->answer_count > 0)
-    {
-       fprintf(stderr, "****WE GOT AN ANSWER!!****1\nThis is the 'base case'\n Do fun printing here.\n");
-       close(sockfd);
-       return 0;
+int initServer(struct sockaddr_in* server, char* dns_server) {
+    // Setup server to be queried
+    server->sin_family = AF_INET;
+    server->sin_port = htons(DNS_PORT);
+    // Clear out the data.
+    memset(server->sin_zero, '\0', sizeof(server->sin_zero));
+    int result = inet_pton(AF_INET, dns_server, &(server->sin_addr.s_addr));
+    if (result != 1) {
+    	if (result == 0) {
+    		fprintf(stderr, "Invalid IP passed in.\n");
+    	} else if (result < 0) {
+    		fprintf(stderr, "Unable to parse IP address: %s\n", strerror(errno));
+    	}
+    	return RET_INVALID_IP;
     }
-    if (ret->description.qr_type == DNS_QR_TYPE_QUERY) {
+    return 0;
+}
+
+int queryForNameAt(char* name, char* root_name) {
+    if(strcmp(name, "0.0.0.0") == 0)//Don't do broadcast shouts!
+        return 1;
+
+    struct sockaddr_in server;
+    int serverRet = 0;
+    if (serverRet = initServer(&server, root_name) != 0) {
+        printf("Invalid dns server.\n");
+        return serverRet;
+    }
+    sendQuery(name, root_name, &server);
+
+    struct DNS_MESSAGE response;
+    getResponse(&response, &server);
+
+    struct MESSAGE_HEADER_EXT ret;
+    unpackExtendedMessageHeader(&(response.header), &ret);
+    printDnsMessage(&response);
+
+    // Start checking
+    if (ret.description.qr_type == DNS_QR_TYPE_QUERY) {
     	fprintf(stderr, "Expected a response, received a query. Aborting.\n");
-    	exit(1);
+    	return RET_INVALID_RESPONSE;
     }
-    //Jacob's Mess:
 
+    //Jacob's Mess:
     uint32_t ip = 0u;
     struct MESSAGE_RESOURCE_RECORD *nxt;
     // We have a definitive answer, let's print stuff out
-    if (ret->description.auth_answer == DNS_AA_TRUE) {
+    if (ret.description.auth_answer == DNS_AA_TRUE) {
         printf("We got a definitive answer.\n");
         // do fun printing stuff
         return 0;//because it's a success.
-    } else if (response->header.additional_count > 0) {
+    } else if (ret.additional_count > 0) {
         printf("We have addresses resolved.\n");
         // Let's hope that we got some IP addresses resolved for us.
-        nxt = response->additional;
+        nxt = response.additional;
 
         if (nxt->type == MESSAGE_QTYPE_A) {
-            ip = ntohl((uint32_t)nxt->rd_data);
+            memcpy(&ip, nxt->rd_data, sizeof(uint32_t));
+            ip = ntohl(ip);
             printf(" autoIP: %d\n", ip);
         }
         //TODO: else if it's type is ... blah blah
@@ -672,11 +668,10 @@ int queryForNameAt(char* name, char* root_name) {
     }
 
     int count = 0;
-
     char next[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &ip, next, INET_ADDRSTRLEN);
     //IP might not hold a valid IP address right now. it could be 0u or if nxt->type != message_qtype_a...
-    if(ret->answer_count == 0 && ret->nameserver_count > 0)//We've been delegated to another authority.
+    if(ret.answer_count == 0 && ret.nameserver_count > 0)//We've been delegated to another authority.
     {
     	//fprintf(stderr, "We should follow this redirect: %s \n", next);
     	fprintf(stderr, "Following a redirect\n");
@@ -685,7 +680,7 @@ int queryForNameAt(char* name, char* root_name) {
     	while(answer != 0)
     	{
     	   nxt++;
-    	   if(count < ret->nameserver_count)
+    	   if(count < ret.nameserver_count)
     	   {
     	      getIPV4addr((uint32_t*)nxt->rd_data, next);
     	      answer = queryForNameAt(name, next);
@@ -693,24 +688,20 @@ int queryForNameAt(char* name, char* root_name) {
     	   else
     	   {
     	      return 1;
-    	      close(sockfd);
     	   }
     	}
     	if(answer == 0)
         {
             fprintf(stderr, "******WE GOT AN ANSWER!!*****3\nThis is the 'One layer up' catch\n");
-            close(sockfd);
             return 0;
         }
     }
-    else if(ret->answer_count > 0)
+    else if(ret.answer_count > 0)
     {
        fprintf(stderr,"****WE GOT AN ANSWER!!****2\n");
-       close(sockfd);
        return 0;
     }
     
-    close(sockfd);
     return 1;
 }
 
@@ -740,15 +731,31 @@ void testLabelSerdes(char* name) {
 }
 
 int main(int argc, char *argv[]) {
-    //Take the input string, pass to the parseLabel method.
-    char name[20] = "www.google.com"; //For now, simply use a hard-coded domain.
-    //Grabbed from A1 udp client
-    char* root_name = getNextRootServer();
+    char *name = (char*)malloc(sizeof(char) * 1024);
+    if (argc == 1) {
+        name = "www.google.com"; //For now, simply use a hard-coded domain.
+    } else if (argc == 2) {
+        name = argv[1];
+    } else {
+        printf("Invalid argument.\n");
+        return 1;
+    }
 
     init();
-    if (argc == 1)
-        queryForNameAt(name, root_name);
-    else
-        queryForNameAt(argv[1], root_name);
+    int ret = 1;
+
+    while(ret != 0) {
+        //Grabbed from A1 udp client
+        char* root_name = getNextRootServer();
+        if (root_name == NULL) {
+            printf("No root server responded.\n");
+            return 1;
+        }
+
+        ret = queryForNameAt(name, root_name);
+    }
+    close(sockfd);
+    free(name);
+
     //testLabelSerdes(name);
 }
