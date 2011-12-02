@@ -49,11 +49,11 @@ struct PTR_VAL {
     int start;
 };
 
-void getIPV4addr(uint8_t* in, char* out)
+void getIPV4addr(uint32_t* in, char* out)
 {
-    uint32_t addr = ntohl(in);
+    uint32_t addr = (*in);//ntohl breaks it?
    inet_ntop(AF_INET, &addr, out, INET_ADDRSTRLEN);
-   printf("%s\n", out);
+   printf("IP Addr: %s\n", out);
    /*uint8_t* ptr = in;
    uint8_t one = *ptr;
    ptr ++;
@@ -541,7 +541,10 @@ void printDnsMessage(struct DNS_MESSAGE* message) {
 }
 
 int queryForNameAt(char* name, char* root_name) {
-
+    
+    if(strcmp(name, "0.0.0.0") == 0)//Don't do broadcast shouts!
+        return 1;
+    
     struct DNS_MESSAGE test_message;
     test_message.header.id = htons(10);
     test_message.header.additional_count = htons(0);
@@ -635,7 +638,8 @@ int queryForNameAt(char* name, char* root_name) {
     printDnsMessage(response);
     if(ret->answer_count > 0)
     {
-       fprintf(stderr, "****WE GOT AN ANSWER!!****\n");
+       fprintf(stderr, "****WE GOT AN ANSWER!!****1\nThis is the 'base case'\n Do fun printing here.\n");
+       close(sockfd);
        return 0;
     }
     if (ret->description.qr_type == DNS_QR_TYPE_QUERY) {
@@ -650,23 +654,28 @@ int queryForNameAt(char* name, char* root_name) {
     if (ret->description.auth_answer == DNS_AA_TRUE) {
         printf("We got a definitive answer.\n");
         // do fun printing stuff
+        return 0;//because it's a success.
     } else if (response->header.additional_count > 0) {
         printf("We have addresses resolved.\n");
         // Let's hope that we got some IP addresses resolved for us.
         nxt = response->additional;
+
         if (nxt->type == MESSAGE_QTYPE_A) {
-            ip = ntohl(nxt->rd_data);
+            ip = ntohl((uint32_t)nxt->rd_data);
+            printf(" autoIP: %d\n", ip);
         }
+        //TODO: else if it's type is ... blah blah
     } else {
         printf("We need to resolve addresses.\n");
         //TODO: need to parse rdata of authority section
+        //this requires forking a thread, or spawning a new process to resolve one of the names in the authority section. 
     }
 
     int count = 0;
 
     char next[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &ip, next, INET_ADDRSTRLEN);
-
+    //IP might not hold a valid IP address right now. it could be 0u or if nxt->type != message_qtype_a...
     if(ret->answer_count == 0 && ret->nameserver_count > 0)//We've been delegated to another authority.
     {
     	//fprintf(stderr, "We should follow this redirect: %s \n", next);
@@ -678,7 +687,7 @@ int queryForNameAt(char* name, char* root_name) {
     	   nxt++;
     	   if(count < ret->nameserver_count)
     	   {
-    	      getIPV4addr((uint8_t*)nxt->rd_data, next);
+    	      getIPV4addr((uint32_t*)nxt->rd_data, next);
     	      answer = queryForNameAt(name, next);
     	   }
     	   else
@@ -687,13 +696,20 @@ int queryForNameAt(char* name, char* root_name) {
     	      close(sockfd);
     	   }
     	}
+    	if(answer == 0)
+        {
+            fprintf(stderr, "******WE GOT AN ANSWER!!*****3\nThis is the 'One layer up' catch\n");
+            close(sockfd);
+            return 0;
+        }
     }
     else if(ret->answer_count > 0)
     {
-       fprintf(stderr,"****WE GOT AN ANSWER!!****");
+       fprintf(stderr,"****WE GOT AN ANSWER!!****2\n");
        close(sockfd);
        return 0;
     }
+    
     close(sockfd);
     return 1;
 }
@@ -730,6 +746,9 @@ int main(int argc, char *argv[]) {
     char* root_name = getNextRootServer();
 
     init();
-    queryForNameAt(name, root_name);
+    if (argc == 1)
+        queryForNameAt(name, root_name);
+    else
+        queryForNameAt(argv[1], root_name);
     //testLabelSerdes(name);
 }
