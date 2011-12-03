@@ -13,6 +13,9 @@ const uint16_t DNS_PORT = 53;
 
 const int RET_INVALID_IP = 1;
 const int RET_INVALID_RESPONSE = 2;
+const int RET_FOUND_ANSWER = 0;
+const int RET_ABORT = -1;
+const int RET_ANSWER_NOT_FOUND = -2;
 
 //QCLASS
 const QCLASS MESSAGE_QCLASS_IN = 0x0001;
@@ -24,6 +27,7 @@ const RR_TYPE MESSAGE_QTYPE_CNAME = 0x0005;
 const RR_TYPE MESSAGE_QTYPE_SOA = 0x0006;
 const RR_TYPE MESSAGE_QTYPE_STAR = 0x00FF;
 const RR_TYPE MESSAGE_QTYPE_AAAA = 0x001C;
+const RR_TYPE MESSAGE_QTYPE_RRSIG = 0x002E;
 
 //QR
 const uint16_t DNS_QR_MASK = 0x8000; //1000 0000 0000 0000
@@ -120,7 +124,7 @@ struct MESSAGE_DESCRIPTION {
     uint16_t recurse_available; // bit 7
     uint16_t Z; // bit 6, 5, 4
     uint16_t resp_code; // 3,2,1,0
-};
+}__attribute__((__packed__));
 
 struct MESSAGE_HEADER_EXT {
     uint16_t id;
@@ -130,6 +134,48 @@ struct MESSAGE_HEADER_EXT {
     uint16_t nameserver_count;
     uint16_t additional_count;
 };
+
+struct RR_CNAME {
+	uint8_t* name;
+}__attribute__((__packed__));
+
+struct RR_NS {
+	uint8_t* name;
+}__attribute__((__packed__));
+
+struct RR_SOA {
+	// Not sure what this is
+	uint8_t* mname;
+	// Not sure what this is
+	uint8_t* rname;
+	uint32_t serial;
+	uint32_t refresh_interval;
+	uint32_t retry_interval;
+	uint32_t expire_interval;
+	uint32_t minimum_ttl;
+}__attribute__((__packed__));
+
+struct RR_A {
+	uint32_t ip;
+}__attribute__((__packed__));
+
+struct RR_AAAA {
+	uint8_t ip[16];
+}__attribute__((__packed__));
+
+struct RR_SIG {
+	uint16_t type_covered;
+	uint8_t algorithm;
+	uint8_t labels;
+	uint32_t ttl;
+	uint32_t sig_expiration;
+	uint32_t sig_inception;
+	uint16_t key_tag;
+	// Must not be compressed, must not have C0?
+	uint8_t* signer_name;
+	// Calculate length by getting rdlength and subtracting everything else
+	char* signature;
+}__attribute__((__packed__));
 
 struct LABEL_LIST* parseLabels(char* str);
 void unpackExtendedMessageHeader(struct MESSAGE_HEADER* header, struct MESSAGE_HEADER_EXT* ret);

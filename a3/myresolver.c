@@ -204,6 +204,7 @@ void createCharFromLabel(uint8_t* label, char* str) {
         itr++;
         int curI = i;
         for (;i < curI + size; i++) {
+
             str[i] = (char) *itr;
             itr++;
         }
@@ -290,14 +291,20 @@ uint16_t getUint16(char* buf) {
 	return ret;
 }
 
-void parseLabel(char* buf, int* bytesParsed, struct PTR_VAL* ptrs, int* ptr_count, int* ptr_size, int recurse) {
+uint8_t getUint8(char* buf) {
+	uint8_t ret;
+	memcpy(&ret, buf, sizeof(uint8_t));
+	return ret;
+}
+
+void parseLabel(char* buf, int* bytesParsed, struct PTR_VAL* ptrs, int* ptr_count, int* ptr_size, int recurse, int follow_ptr) {
     int start = *bytesParsed;
     while (1) {
         //Get size of label
         uint8_t curSize = (uint8_t) *(buf + *bytesParsed);
 
         // We have a pointer
-        if ((curSize & 0xC0) == 0xC0) {
+        if ((curSize & 0xC0) == 0xC0 && follow_ptr == 1) {
             uint16_t ptr = 0;
             memcpy(&ptr, buf + *bytesParsed, sizeof(uint16_t));
             ptr = ntohs(ptr);
@@ -311,7 +318,7 @@ void parseLabel(char* buf, int* bytesParsed, struct PTR_VAL* ptrs, int* ptr_coun
             (*ptr_count)++;
 
             //XXX: There might be a bug here if we go recursive, but I need an example to verify.
-            parseLabel(buf, &end, ptrs, ptr_count, ptr_size, 1);
+            parseLabel(buf, &end, ptrs, ptr_count, ptr_size, 1, 1);
 
             cur->len = end - ptr;
 
@@ -339,9 +346,9 @@ void copyLabel(char* buf, uint8_t* dest, int start, struct PTR_VAL* ptrs, int pt
     int srcItr = start;
     for (; j < ptrCount; j++) {
         if (srcItr < ptrs[j].pointerStart) {
-            memcpy(dest + destItr, buf + srcItr, ptrs[j].start - start);
-            destItr += ptrs[j].start - srcItr;
-            srcItr += (ptrs[j].start - srcItr);
+            memcpy(dest + destItr, buf + srcItr, ptrs[j].pointerStart - srcItr);
+            destItr += ptrs[j].pointerStart - srcItr;
+            srcItr += (ptrs[j].pointerStart - srcItr);
         }
 
         memcpy(dest + destItr, buf + ptrs[j].start, ptrs[j].len);
@@ -351,6 +358,120 @@ void copyLabel(char* buf, uint8_t* dest, int start, struct PTR_VAL* ptrs, int pt
     if (destItr < total_len) {
         memcpy(dest + destItr, buf + srcItr, total_len - destItr);
     }
+}
+
+void parseA(void** dest, char* src, uint16_t len) {
+	*dest = malloc(sizeof(struct RR_A));
+	memcpy(*dest, src, len);
+}
+
+void parseAAAA(void** dest, char* src, uint16_t len) {
+	*dest = malloc(sizeof(struct RR_AAAA));
+	memcpy(*dest, src, len);
+}
+
+void parseRdLabel(void** dest, char* src, int *bytesParsed, int follow_ptr) {
+	struct PTR_VAL ptrs[128];
+
+	int startPos = *bytesParsed;
+	int ptrCount = 0;
+	int ptrSize = 0;
+
+	parseLabel(src, bytesParsed, ptrs, &ptrCount, &ptrSize, 0, follow_ptr);
+
+	// Populate name
+	// Size breakdown:
+	// No pointer label = bytesParsed - startPos
+	// Each pointer has 2 bytes not copied
+	// The total number of pointers has ptrSize bytes
+	int labelSize = ((*bytesParsed - startPos) - (ptrCount * 2)) + ptrSize;
+	*dest = (uint8_t *) malloc(labelSize);
+	copyLabel(src, *dest, startPos, ptrs, ptrCount, ptrSize, labelSize);
+}
+
+void parseCNAME(void** dest, char* src, int bytesParsed) {
+	*dest = malloc(sizeof(struct RR_CNAME));
+	struct RR_CNAME *s = (struct RR_CNAME*)*dest;
+	parseRdLabel((void**)&(s->name), src, &bytesParsed, 1);
+}
+
+void parseNS(void** dest, char* src, int bytesParsed) {
+	*dest = malloc(sizeof(struct RR_NS));
+	struct RR_NS *s = (struct RR_NS*)*dest;
+	parseRdLabel((void**)&(s->name), src, &bytesParsed, 1);
+}
+
+void parseSOA(void** dest, char* src, int bytesParsed) {
+	*dest = malloc(sizeof(struct RR_SOA));
+	struct RR_SOA *s = (struct RR_SOA*)*dest;
+	parseRdLabel((void**)&(s->mname), src, &bytesParsed, 1);
+	parseRdLabel((void**)&(s->rname), src, &bytesParsed, 1);
+
+	s->serial = getUint32(src + bytesParsed);
+	bytesParsed += sizeof(uint32_t);
+
+	s->refresh_interval = getUint32(src + bytesParsed);
+	bytesParsed += sizeof(uint32_t);
+
+	s->retry_interval = getUint32(src + bytesParsed);
+	bytesParsed += sizeof(uint32_t);
+
+	s->expire_interval = getUint32(src + bytesParsed);
+	bytesParsed += sizeof(uint32_t);
+
+	s->minimum_ttl = getUint32(src + bytesParsed);
+	bytesParsed += sizeof(uint32_t);
+}
+
+void parseRRSIG(void** dest, char* src, int bytesParsed, uint16_t len) {
+	*dest = malloc(sizeof(struct RR_SOA));
+	struct RR_SIG *s = (struct RR_SIG*)*dest;
+	int start = bytesParsed;
+
+	s->type_covered = getUint16(src + bytesParsed);
+	bytesParsed += sizeof(uint16_t);
+
+	s->algorithm = getUint8(src + bytesParsed);
+	bytesParsed += sizeof(uint8_t);
+
+	s->labels = getUint8(src + bytesParsed);
+	bytesParsed += sizeof(uint8_t);
+
+	s->ttl = getUint32(src + bytesParsed);
+	bytesParsed += sizeof(uint32_t);
+
+	s->sig_expiration = getUint32(src + bytesParsed);
+	bytesParsed += sizeof(uint32_t);
+
+	s->sig_inception = getUint32(src + bytesParsed);
+	bytesParsed += sizeof(uint32_t);
+
+	s->key_tag = getUint16(src + bytesParsed);
+	bytesParsed += sizeof(uint16_t);
+
+	parseRdLabel((void**)&(s->signer_name), src, &bytesParsed, 0);
+
+	// Assume signature is remaining bytes.
+	memcpy(&s->signature, src + bytesParsed, bytesParsed - start);
+}
+
+void parseRdata(void** dest, char* src, int bytesParsed, RR_TYPE type, uint16_t len) {
+	if (type == MESSAGE_QTYPE_A) {
+		parseA(dest, src + bytesParsed, len);
+	} else if (type == MESSAGE_QTYPE_AAAA) {
+		parseAAAA(dest, src + bytesParsed, len);
+	} else if (type == MESSAGE_QTYPE_CNAME) {
+		parseCNAME(dest, src, bytesParsed);
+	} else if (type == MESSAGE_QTYPE_NS) {
+		parseNS(dest, src, bytesParsed);
+	} else if (type == MESSAGE_QTYPE_SOA) {
+		parseSOA(dest, src, bytesParsed);
+	} else if (type == MESSAGE_QTYPE_RRSIG) {
+		parseRRSIG(dest, src, bytesParsed, len);
+	} else {
+		*dest = malloc(len);
+		memcpy(*dest, src, len);
+	}
 }
 
 void getQuestion(struct MESSAGE_QUESTION** question, int count, int *bytesParsed, char* buf) {
@@ -366,7 +487,7 @@ void getQuestion(struct MESSAGE_QUESTION** question, int count, int *bytesParsed
     		int ptrCount = 0;
     		int ptrSize = 0;
 
-    		parseLabel(buf, bytesParsed, ptrs, &ptrCount, &ptrSize, 0);
+    		parseLabel(buf, bytesParsed, ptrs, &ptrCount, &ptrSize, 0, 1);
 
     		// Populate label
     		// Size breakdown:
@@ -404,7 +525,7 @@ void getResourceRecord(struct MESSAGE_RESOURCE_RECORD** record, int count, int *
     		int ptrCount = 0;
     		int ptrSize = 0;
 
-    		parseLabel(buf, bytesParsed, ptrs, &ptrCount, &ptrSize, 0);
+    		parseLabel(buf, bytesParsed, ptrs, &ptrCount, &ptrSize, 0, 1);
 
     		// Populate name
     		// Size breakdown:
@@ -433,8 +554,7 @@ void getResourceRecord(struct MESSAGE_RESOURCE_RECORD** record, int count, int *
     		uint16_t rdLen = ntohs(newRecord->rdlength);
 
     		// Populate RD Data
-    		newRecord->rd_data = malloc(rdLen);
-    		memcpy(newRecord->rd_data, buf + *bytesParsed, rdLen);
+    		parseRdata(&(newRecord->rd_data), buf, *bytesParsed, ntohs(newRecord->type), rdLen);
     		*bytesParsed += rdLen;
 
     		*((*record) + i) = *newRecord;
@@ -509,10 +629,17 @@ void printRr(struct MESSAGE_RESOURCE_RECORD* rr, uint16_t count, char* title) {
     for (;i < count; i++) {
         struct MESSAGE_RESOURCE_RECORD* cur = rr + i;
         char name[255];
-        char rrType[10];
+        char rrType[20];
         createCharFromLabel(cur->name, name);
         getRrTypeStr(ntohs(cur->type), rrType);
-        printf("%s %u %s %s %u \n", name, ntohl(cur->ttl), "IN", rrType, ntohs(cur->rdlength));
+
+        if (ntohs(cur->type) == MESSAGE_QTYPE_NS) {
+        	char ns[255];
+        	createCharFromLabel(((struct RR_CNAME*) (cur->rd_data))->name, ns);
+        	printf("%s %u %s %s %u %s\n", name, ntohl(cur->ttl), "IN", rrType, ntohs(cur->rdlength), ns);
+        } else {
+        	printf("%s %u %s %s %u \n", name, ntohl(cur->ttl), "IN", rrType, ntohs(cur->rdlength));
+        }
     }
 }
 
@@ -617,13 +744,36 @@ int initServer(struct sockaddr_in* server, char* dns_server) {
     return 0;
 }
 
+int loopThroughList(char* name, char** list, int count) {
+	int i = 0;
+	int ret = RET_ANSWER_NOT_FOUND;
+	for (; i < count && (ret != RET_FOUND_ANSWER || ret != RET_ABORT); i++) {
+		char* cur = list[i];
+		queryForNameAt(name, cur);
+	}
+
+	if (ret == RET_ANSWER_NOT_FOUND) {
+		ret = RET_ANSWER_NOT_FOUND;
+	}
+
+	return ret;
+}
+
+// Answers must be resolved.
+int loopThroughAnswers(struct MESSAGE_RESOURCE_RECORD* answers, uint16_t count) {
+	int i = 0;
+	for (; i < count; i++) {
+		struct MESSAGE_RESOURCE_RECORD* answer = answers + i;
+	}
+}
+
 int queryForNameAt(char* name, char* root_name) {
     if(strcmp(name, "0.0.0.0") == 0)//Don't do broadcast shouts!
         return 1;
 
     struct sockaddr_in server;
     int serverRet = 0;
-    if (serverRet = initServer(&server, root_name) != 0) {
+    if ((serverRet = initServer(&server, root_name)) != 0) {
         printf("Invalid dns server.\n");
         return serverRet;
     }
@@ -742,20 +892,10 @@ int main(int argc, char *argv[]) {
     }
 
     init();
-    int ret = 1;
-
-    while(ret != 0) {
-        //Grabbed from A1 udp client
-        char* root_name = getNextRootServer();
-        if (root_name == NULL) {
-            printf("No root server responded.\n");
-            return 1;
-        }
-
-        ret = queryForNameAt(name, root_name);
-    }
+    int ret = loopThroughList(name, ROOT_IP, ROOT_COUNT);
     close(sockfd);
     free(name);
 
+    return ret;
     //testLabelSerdes(name);
 }
