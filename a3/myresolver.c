@@ -170,7 +170,6 @@ void sendDnsMessage(struct DNS_MESSAGE* message, struct sockaddr_in* server) {
 	int packet_size = 0;
 	char* buf = (char*) malloc(MAX_UDP_SIZE);
 	char* itr = buf;
-	printf("packet size: %d\n", packet_size);
 
 	//Send Header
 	appendToBuffer(&itr, (&(message->header)), sizeof(struct MESSAGE_HEADER), &packet_size);
@@ -620,6 +619,24 @@ void printQuestion(struct MESSAGE_QUESTION* question, uint16_t count) {
     }
 }
 
+void printNS(char* name, char* rrType, char* class, uint16_t ttl, uint16_t rdLen, void* rd_data) {
+	char ns[255];
+	createCharFromLabel(((struct RR_CNAME*) (rd_data))->name, ns);
+	printf("%s %u %s %s %u %s\n", name, ttl, "IN", rrType, rdLen, ns);
+}
+
+void printA(char* name, char* rrType, char* class, uint16_t ttl, uint16_t rdLen, void* rd_data) {
+	char ip[INET_ADDRSTRLEN];
+	inet_ntop(AF_INET, rd_data, ip, INET_ADDRSTRLEN);
+	printf("%s %u %s %s %u %s\n", name, ttl, "IN", rrType, rdLen, ip);
+}
+
+void printAAAA(char* name, char* rrType, char* class, uint16_t ttl, uint16_t rdLen, void* rd_data) {
+	char ip[INET6_ADDRSTRLEN];
+	inet_ntop(AF_INET6, rd_data, ip, INET6_ADDRSTRLEN);
+	printf("%s %u %s %s %u %s\n", name, ttl, "IN", rrType, rdLen, ip);
+}
+
 void printRr(struct MESSAGE_RESOURCE_RECORD* rr, uint16_t count, char* title) {
     count = ntohs(count);
     printf("%s", title);
@@ -632,13 +649,19 @@ void printRr(struct MESSAGE_RESOURCE_RECORD* rr, uint16_t count, char* title) {
         char rrType[20];
         createCharFromLabel(cur->name, name);
         getRrTypeStr(ntohs(cur->type), rrType);
+        RR_TYPE type = ntohs(cur->type);
+        uint32_t ttl = ntohl(cur->ttl);
+        uint16_t rdLen = ntohs(cur->rdlength);
+        void* rd_data = cur->rd_data;
 
-        if (ntohs(cur->type) == MESSAGE_QTYPE_NS) {
-        	char ns[255];
-        	createCharFromLabel(((struct RR_CNAME*) (cur->rd_data))->name, ns);
-        	printf("%s %u %s %s %u %s\n", name, ntohl(cur->ttl), "IN", rrType, ntohs(cur->rdlength), ns);
+        if (type == MESSAGE_QTYPE_NS) {
+        	printNS(name, rrType, "IN", ttl, rdLen, rd_data);
+        } else if (type == MESSAGE_QTYPE_A) {
+        	printA(name, rrType, "IN", ttl, rdLen, rd_data);
+        } else if (type == MESSAGE_QTYPE_AAAA) {
+        	printAAAA(name, rrType, "IN", ttl, rdLen, rd_data);
         } else {
-        	printf("%s %u %s %s %u \n", name, ntohl(cur->ttl), "IN", rrType, ntohs(cur->rdlength));
+        	printf("%s %u %s %s %u\n", name, ttl, "IN", rrType, rdLen);
         }
     }
 }
@@ -664,7 +687,7 @@ void printDnsMessage(struct DNS_MESSAGE* message) {
     printf("=============END=====================\n");
 }
 
-int sendQuery(char* hostToResolve, char* dns_server, struct sockaddr_in* server) {
+int sendQuery(char* hostToResolve, char* dns_server, RR_TYPE query_type, struct sockaddr_in* server) {
     struct DNS_MESSAGE test_message;
     test_message.header.id = htons(10);
     test_message.header.additional_count = htons(0);
@@ -680,10 +703,10 @@ int sendQuery(char* hostToResolve, char* dns_server, struct sockaddr_in* server)
     createLabelFromChar(hostToResolve, &name_label);
     question->qname = name_label;
     question->qclass = htons(MESSAGE_QCLASS_IN);
-    question->qtype = htons(MESSAGE_QTYPE_AAAA);
+    question->qtype = htons(query_type);
 
     fprintf(stderr, "Trying DNS server %s\n", dns_server);
-    printDnsMessage(&test_message);
+    //printDnsMessage(&test_message);
     sendDnsMessage(&test_message, server);
     printf("done sending... wait for reply!\n");
     return 0;
@@ -744,115 +767,185 @@ int initServer(struct sockaddr_in* server, char* dns_server) {
     return 0;
 }
 
-int loopThroughList(char* name, char** list, int count) {
+int assignAnswer(struct MESSAGE_RESOURCE_RECORD* dest, struct MESSAGE_RESOURCE_RECORD* list, uint16_t listCount, RR_TYPE* query_types, int typeCount, struct MESSAGE_RESOURCE_RECORD** answer) {
 	int i = 0;
-	int ret = RET_ANSWER_NOT_FOUND;
-	for (; i < count && (ret != RET_FOUND_ANSWER || ret != RET_ABORT); i++) {
-		char* cur = list[i];
-		queryForNameAt(name, cur);
+
+	for (; i < listCount; i++) {
+		struct MESSAGE_RESOURCE_RECORD* cur = (list + i);
+
+		int j = 0;
+		for (; j < typeCount; j++) {
+			if (ntohs(cur->type) == query_types[j]) {
+				memcpy(dest, cur, sizeof(struct MESSAGE_RESOURCE_RECORD));
+				fprintf(stderr, "Found an answer to NS query.\n");
+				return RET_FOUND_ANSWER;
+			}
+		}
+
+		if (ntohs(cur->type) == MESSAGE_QTYPE_CNAME) {
+			char cname[1024];
+			createCharFromLabel(((struct RR_CNAME*)cur->rd_data)->name, cname);
+			return loopThroughList(cname, ROOT_IP, ROOT_COUNT, MESSAGE_QTYPE_A, answer);
+		}
+
+		if (ntohs(cur->type) == MESSAGE_QTYPE_SOA) {
+			fprintf(stderr, "Not sure what to do about the SOA yet. \n");
+			return RET_ANSWER_NOT_FOUND;
+		}
 	}
 
-	if (ret == RET_ANSWER_NOT_FOUND) {
-		ret = RET_ANSWER_NOT_FOUND;
-	}
-
-	return ret;
+	return RET_ANSWER_NOT_FOUND;
 }
 
-// Answers must be resolved.
-int loopThroughAnswers(struct MESSAGE_RESOURCE_RECORD* answers, uint16_t count) {
-	int i = 0;
-	for (; i < count; i++) {
-		struct MESSAGE_RESOURCE_RECORD* answer = answers + i;
+int checkAuthoritativeAnswer(struct DNS_MESSAGE* response, RR_TYPE query_type, struct MESSAGE_RESOURCE_RECORD** answer) {
+	printf("We got a definitive answer.\n");
+	struct MESSAGE_HEADER_EXT ret;
+	unpackExtendedMessageHeader(&(response->header), &ret);
+	// TODO: determine if the record type being searched for was found.
+
+	// likely parsing ns records.
+	if (query_type == MESSAGE_QTYPE_A) {
+		*answer = (struct MESSAGE_RESOURCE_RECORD*) malloc(sizeof(struct MESSAGE_RESOURCE_RECORD));
+		RR_TYPE types[1];
+		types[0] = MESSAGE_QTYPE_A;
+		return assignAnswer(*answer, response->answer, ret.answer_count, types, 1, answer);
+
+	// likely parsing the AAAA with RRSIG
+	} else if (query_type == MESSAGE_QTYPE_AAAA) {
+		*answer = (struct MESSAGE_RESOURCE_RECORD*) malloc(sizeof(struct MESSAGE_RESOURCE_RECORD) * 2);
+		RR_TYPE types[2];
+		types[0] = MESSAGE_QTYPE_AAAA;
+		types[1] = MESSAGE_QTYPE_RRSIG;
+		return assignAnswer(*answer, response->answer, ret.answer_count, types, 2, answer);
+	} else {
+		fprintf(stderr, "Not sure what is being queried for.\n");
 	}
+	return RET_ANSWER_NOT_FOUND;
 }
 
-int queryForNameAt(char* name, char* root_name) {
-    if(strcmp(name, "0.0.0.0") == 0)//Don't do broadcast shouts!
-        return 1;
-
+int queryForNameAt(char* name, char* root_name, RR_TYPE query_type, struct MESSAGE_RESOURCE_RECORD** answer) {
     struct sockaddr_in server;
     int serverRet = 0;
     if ((serverRet = initServer(&server, root_name)) != 0) {
         printf("Invalid dns server.\n");
         return serverRet;
     }
-    sendQuery(name, root_name, &server);
+    sendQuery(name, root_name, query_type, &server);
 
-    struct DNS_MESSAGE response;
-    getResponse(&response, &server);
+    struct DNS_MESSAGE *response = (struct DNS_MESSAGE *) malloc(sizeof(struct DNS_MESSAGE));
+    getResponse(response, &server);
 
     struct MESSAGE_HEADER_EXT ret;
-    unpackExtendedMessageHeader(&(response.header), &ret);
-    printDnsMessage(&response);
+    unpackExtendedMessageHeader(&(response->header), &ret);
+    //printDnsMessage(response);
 
     // Start checking
     if (ret.description.qr_type == DNS_QR_TYPE_QUERY) {
     	fprintf(stderr, "Expected a response, received a query. Aborting.\n");
     	return RET_INVALID_RESPONSE;
+    } else if (ret.description.auth_answer == DNS_AA_TRUE &&
+    		ret.description.resp_code == DNS_RCODE_NAME_ERROR) {
+    	fprintf(stderr, "No such name.\n");
+    	return RET_NO_SUCH_NAME;
+    } else if (ret.description.resp_code != DNS_RCODE_NOERROR) {
+    	fprintf(stderr, "Invalid response type.\n");
+    	return RET_INVALID_RESPONSE;
     }
 
-    //Jacob's Mess:
-    uint32_t ip = 0u;
-    struct MESSAGE_RESOURCE_RECORD *nxt;
     // We have a definitive answer, let's print stuff out
     if (ret.description.auth_answer == DNS_AA_TRUE) {
-        printf("We got a definitive answer.\n");
-        // do fun printing stuff
-        return 0;//because it's a success.
-    } else if (ret.additional_count > 0) {
-        printf("We have addresses resolved.\n");
+    	return checkAuthoritativeAnswer(response, query_type, answer);
+    } else if (ret.additional_count > 0 || ret.answer_count > 0) {
         // Let's hope that we got some IP addresses resolved for us.
-        nxt = response.additional;
+        int result = loopThroughRRs(name, root_name, response->additional, ret.additional_count, query_type, answer);
 
-        if (nxt->type == MESSAGE_QTYPE_A) {
-            memcpy(&ip, nxt->rd_data, sizeof(uint32_t));
-            ip = ntohl(ip);
-            printf(" autoIP: %d\n", ip);
+        if (result < 0 || result == RET_FOUND_ANSWER) {
+        	return result;
+        } else {
+        	// We didn't find the answer in the additional section
+        	// This could be because the servers were down, no resolutions were provided,
+        	// or the answer didn't exist. Regardless we're now going to check the answer
+        	// section.
+        	result = loopThroughRRs(name, root_name, response->answer, ret.answer_count, query_type, answer);
+
         }
-        //TODO: else if it's type is ... blah blah
     } else {
-        printf("We need to resolve addresses.\n");
-        //TODO: need to parse rdata of authority section
-        //this requires forking a thread, or spawning a new process to resolve one of the names in the authority section. 
+    	printf("No responses.\n");
     }
 
-    int count = 0;
-    char next[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &ip, next, INET_ADDRSTRLEN);
-    //IP might not hold a valid IP address right now. it could be 0u or if nxt->type != message_qtype_a...
-    if(ret.answer_count == 0 && ret.nameserver_count > 0)//We've been delegated to another authority.
-    {
-    	//fprintf(stderr, "We should follow this redirect: %s \n", next);
-    	fprintf(stderr, "Following a redirect\n");
-    	//close(sockfd);
-    	int answer = queryForNameAt(name, next);
-    	while(answer != 0)
-    	{
-    	   nxt++;
-    	   if(count < ret.nameserver_count)
-    	   {
-    	      getIPV4addr((uint32_t*)nxt->rd_data, next);
-    	      answer = queryForNameAt(name, next);
-    	   }
-    	   else
-    	   {
-    	      return 1;
-    	   }
-    	}
-    	if(answer == 0)
-        {
-            fprintf(stderr, "******WE GOT AN ANSWER!!*****3\nThis is the 'One layer up' catch\n");
-            return 0;
-        }
-    }
-    else if(ret.answer_count > 0)
-    {
-       fprintf(stderr,"****WE GOT AN ANSWER!!****2\n");
-       return 0;
-    }
-    
-    return 1;
+    return RET_ANSWER_NOT_FOUND;
+}
+
+int loopThroughList(char* name, char** list, int count, RR_TYPE query_type, struct MESSAGE_RESOURCE_RECORD** answer) {
+	int i = 0;
+	int ret = RET_ANSWER_NOT_FOUND;
+	for (; i < count; i++) {
+		char* cur = list[i];
+		ret = queryForNameAt(name, cur, query_type, answer);
+		if (ret == RET_FOUND_ANSWER || ret == RET_ABORT) {
+			break;
+		}
+	}
+
+	return ret;
+}
+
+// Answers must be resolved.
+int loopThroughRRs(char* name, char* last_root, struct MESSAGE_RESOURCE_RECORD* answers, uint16_t count, RR_TYPE query_type, struct MESSAGE_RESOURCE_RECORD** answer) {
+	int i = 0;
+	for (; i < count; i++) {
+		struct MESSAGE_RESOURCE_RECORD* rr = answers + i;
+		RR_TYPE type = ntohs(rr->type);
+		char* new_root = NULL;
+		char ip[INET_ADDRSTRLEN];
+
+		// Need to resolve NS records
+		if (type == MESSAGE_QTYPE_NS) {
+			struct MESSAGE_RESOURCE_RECORD* parsedResponse;
+			char ns[1024];
+			createCharFromLabel(((struct RR_NS*) rr->rd_data)->name, ns);
+
+			// First make sure we're not infinitely recursing.
+			int nsLen = strlen(ns);
+			int lrLen = strlen(last_root);
+
+			if (nsLen >= lrLen) {
+				if (strcmp(last_root, ns + (nsLen - lrLen)) == 0) {
+					fprintf(stderr, "Attempted infinite recursion (1). Skipping.\n");
+					// Skip to next one in list.
+					continue;
+				}
+			} else if (lrLen > nsLen) {
+				if (strcmp(ns, last_root + (lrLen - nsLen)) == 0) {
+					fprintf(stderr, "Attempted infinite recursion (2). Skipping.\n");
+					// Skip to next one in list.
+					continue;
+				}
+			}
+
+			int result = loopThroughList(ns, ROOT_IP, ROOT_COUNT, MESSAGE_QTYPE_A, &parsedResponse);
+
+			if (result == RET_FOUND_ANSWER) {
+				inet_ntop(AF_INET, parsedResponse->rd_data, ip, INET_ADDRSTRLEN);
+			} else {
+				continue;
+			}
+		}
+
+		// We got lucky with an A record!
+		if (type == MESSAGE_QTYPE_A) {
+			inet_ntop(AF_INET, rr->rd_data, ip, INET_ADDRSTRLEN);
+		}
+
+		if (ip != NULL) {
+			int result = queryForNameAt(name, ip, query_type, answer);
+			if (result == RET_FOUND_ANSWER) {
+				return RET_FOUND_ANSWER;
+			}
+		}
+	}
+
+	return RET_ANSWER_NOT_FOUND;
 }
 
 void init() {
@@ -880,19 +973,44 @@ void testLabelSerdes(char* name) {
     printf("%s\n", str);
 }
 
+void strtolower(char str[]) {
+	int i;
+	for (i = 0; str[i] != '\0'; ++i) {
+		if (str[i] >= 'A' && str[i] <= 'Z') {
+			str[i] = str[i] + 'a' - 'A';
+		}
+ 	}
+}
+
 int main(int argc, char *argv[]) {
     char *name = (char*)malloc(sizeof(char) * 1024);
+
     if (argc == 1) {
-        name = "www.google.com"; //For now, simply use a hard-coded domain.
+    	memcpy(name, "www.google.com.", 16);
+        //name = "www.google.com."; //For now, simply use a hard-coded domain.
     } else if (argc == 2) {
-        name = argv[1];
+		if (strlen(argv[1]) >= 1024) {
+			fprintf(stderr, "Invalid hostname, too long.\n");
+			return 1;
+		}
+		memcpy(name, argv[1], strlen(argv[1]) + 1);
+        //name = argv[1];
+        strtolower(name);
+        // Append period if necessary
+        if (name[strlen(name) - 1] != '.') {
+        	int len = strlen(name);
+        	name[len] = '.';
+        	name[len + 1] = '\0';
+        }
     } else {
         printf("Invalid argument.\n");
         return 1;
     }
 
     init();
-    int ret = loopThroughList(name, ROOT_IP, ROOT_COUNT);
+    struct MESSAGE_RESOURCE_RECORD* answer;
+    int ret = loopThroughList(name, ROOT_IP, ROOT_COUNT, MESSAGE_QTYPE_AAAA, &answer);
+    printRr(answer, 256, "FOUND ULTIMATE ANSWER\n");
     close(sockfd);
     free(name);
 

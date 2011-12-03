@@ -11,11 +11,12 @@ typedef uint16_t QCLASS;
 const uint16_t MAX_UDP_SIZE = 4096;
 const uint16_t DNS_PORT = 53;
 
+const int RET_FOUND_ANSWER = 0;
 const int RET_INVALID_IP = 1;
 const int RET_INVALID_RESPONSE = 2;
-const int RET_FOUND_ANSWER = 0;
+const int RET_ANSWER_NOT_FOUND = 3;
 const int RET_ABORT = -1;
-const int RET_ANSWER_NOT_FOUND = -2;
+const int RET_NO_SUCH_NAME = -2;
 
 //QCLASS
 const QCLASS MESSAGE_QCLASS_IN = 0x0001;
@@ -178,6 +179,9 @@ struct RR_SIG {
 }__attribute__((__packed__));
 
 struct LABEL_LIST* parseLabels(char* str);
+int loopThroughList(char* name, char** list, int count, RR_TYPE query_type, struct MESSAGE_RESOURCE_RECORD** answer);
+int loopThroughRRs(char* name, char* last_root, struct MESSAGE_RESOURCE_RECORD* answers, uint16_t count, RR_TYPE query_type, struct MESSAGE_RESOURCE_RECORD** answer);
+int queryForNameAt(char* name, char* root_name, RR_TYPE query_type, struct MESSAGE_RESOURCE_RECORD** answer);
 void unpackExtendedMessageHeader(struct MESSAGE_HEADER* header, struct MESSAGE_HEADER_EXT* ret);
 void repackExtendedMessageHeader(struct MESSAGE_HEADER_EXT* header, struct MESSAGE_HEADER* ret);
 
