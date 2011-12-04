@@ -785,7 +785,8 @@ int assignAnswer(struct MESSAGE_RESOURCE_RECORD* dest, struct MESSAGE_RESOURCE_R
 		if (ntohs(cur->type) == MESSAGE_QTYPE_CNAME) {
 			char cname[1024];
 			createCharFromLabel(((struct RR_CNAME*)cur->rd_data)->name, cname);
-			return loopThroughList(cname, ROOT_IP, ROOT_COUNT, MESSAGE_QTYPE_A, answer);
+			fprintf(stderr, "Found CNAME: %s\n", cname);
+			return loopThroughList(cname, ROOT_IP, ROOT_COUNT, MESSAGE_QTYPE_AAAA, answer);
 		}
 
 		if (ntohs(cur->type) == MESSAGE_QTYPE_SOA) {
@@ -854,7 +855,11 @@ int queryForNameAt(char* name, char* root_name, RR_TYPE query_type, struct MESSA
 
     // We have a definitive answer, let's print stuff out
     if (ret.description.auth_answer == DNS_AA_TRUE) {
-    	return checkAuthoritativeAnswer(response, query_type, answer);
+    	if (ret.answer_count > 0) {
+    		return checkAuthoritativeAnswer(response, query_type, answer);
+    	} else {
+    		return RET_NO_SUCH_NAME;
+    	}
     } else if (ret.additional_count > 0 || ret.answer_count > 0) {
         // Let's hope that we got some IP addresses resolved for us.
         int result = loopThroughRRs(name, root_name, response->additional, ret.additional_count, query_type, answer);
@@ -882,7 +887,7 @@ int loopThroughList(char* name, char** list, int count, RR_TYPE query_type, stru
 	for (; i < count; i++) {
 		char* cur = list[i];
 		ret = queryForNameAt(name, cur, query_type, answer);
-		if (ret == RET_FOUND_ANSWER || ret == RET_ABORT) {
+		if (ret <= RET_FOUND_ANSWER) {
 			break;
 		}
 	}
@@ -890,7 +895,6 @@ int loopThroughList(char* name, char** list, int count, RR_TYPE query_type, stru
 	return ret;
 }
 
-// Answers must be resolved.
 int loopThroughRRs(char* name, char* last_root, struct MESSAGE_RESOURCE_RECORD* answers, uint16_t count, RR_TYPE query_type, struct MESSAGE_RESOURCE_RECORD** answer) {
 	int i = 0;
 	for (; i < count; i++) {
@@ -939,8 +943,8 @@ int loopThroughRRs(char* name, char* last_root, struct MESSAGE_RESOURCE_RECORD* 
 
 		if (ip != NULL) {
 			int result = queryForNameAt(name, ip, query_type, answer);
-			if (result == RET_FOUND_ANSWER) {
-				return RET_FOUND_ANSWER;
+			if (result <= RET_FOUND_ANSWER) {
+				return result;
 			}
 		}
 	}
@@ -1010,7 +1014,13 @@ int main(int argc, char *argv[]) {
     init();
     struct MESSAGE_RESOURCE_RECORD* answer;
     int ret = loopThroughList(name, ROOT_IP, ROOT_COUNT, MESSAGE_QTYPE_AAAA, &answer);
-    printRr(answer, 256, "FOUND ULTIMATE ANSWER\n");
+    if (ret == RET_FOUND_ANSWER) {
+    	printRr(answer, 256, "FOUND ULTIMATE ANSWER\n");
+    } else if (ret == RET_NO_SUCH_NAME) {
+    	printf("No record of that type.\n");
+    } else {
+    	printf("No record found.\n");
+    }
     close(sockfd);
     free(name);
 
