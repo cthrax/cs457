@@ -370,7 +370,7 @@ void parseRdLabel(void** dest, char* src, int *bytesParsed, int follow_ptr) {
 	// Each pointer has 2 bytes not copied
 	// The total number of pointers has ptrSize bytes
 	int labelSize = ((*bytesParsed - startPos) - (ptrCount * 2)) + ptrSize;
-	*dest = (uint8_t *) malloc(labelSize);
+	*dest = (uint8_t *) malloc(labelSize + 1);
 	copyLabel(src, *dest, startPos, ptrs, ptrCount, ptrSize, labelSize);
 }
 
