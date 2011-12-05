@@ -178,6 +178,14 @@ struct RR_SIG {
 	char* signature;
 }__attribute__((__packed__));
 
+struct RR_KEY {
+	uint16_t flags;
+	uint8_t  protocol;
+	uint8_t  algorithm;
+	char* key;
+	
+}__attribute__((__packed__));
+
 struct LABEL_LIST* parseLabels(char* str);
 int loopThroughList(char* name, char** list, int count, RR_TYPE query_type, struct MESSAGE_RESOURCE_RECORD** answer);
 int loopThroughRRs(char* name, char* last_root, struct MESSAGE_RESOURCE_RECORD* answers, uint16_t count, RR_TYPE query_type, struct MESSAGE_RESOURCE_RECORD** answer);

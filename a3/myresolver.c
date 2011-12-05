@@ -45,27 +45,12 @@ struct PTR_VAL {
 
 void getIPV4addr(uint32_t* in, char* out)
 {
-    uint32_t addr = (*in);//ntohl breaks it?
+    uint32_t addr = ntohl(*in);
    inet_ntop(AF_INET, &addr, out, INET_ADDRSTRLEN);
-   printf("IP Addr: %s\n", out);
-   /*uint8_t* ptr = in;
-   uint8_t one = *ptr;
-   ptr ++;
-   uint8_t two = *ptr;
-   ptr ++;
-   uint8_t three = *ptr;
-   ptr ++;
-   uint8_t four = *ptr;
-   sprintf(out, "%d.%d.%d.%d", (int)one,(int)three,(int)two, (int)four);*/
-   //This method returns valid-looking IPV4 addresses, BUT, they simply don't work.
-   //four.three.one.two *seems* to be the correct answer as it actually will allow me to get ANSWER sections.
-   //I have *no* idea why this is so, but there you have it.
-   // 46.1.192.102 actually responded, and gave an answer to google.com. . . 
-   
+   printf("IP Addr: %s\n", out); 
 }
 
 char* getNextRootServer() {
-    //TODO: Need some protection for going out of bounds
     //TODO: Possibly use this function for any list of IP addresses to try
     if (cur_root_server == ROOT_COUNT) {
         return NULL;
@@ -727,9 +712,7 @@ int getResponse(struct DNS_MESSAGE* response, struct sockaddr_in* server) {
     int bytesReceived = recvfrom(sockfd, data, MAX_UDP_SIZE, 0, (struct sockaddr*) (&(server)), &recvLen);
     if (bytesReceived < 0) {
         fprintf(stderr, "Error receiving packet: %s\n", strerror(errno));
-        //TODO: Should we exit here, or is where we re-initiate the loop with the next server?
-        // This is where we "Return False" (1) and keep the loop going. Yay recursion.
-        return 1;
+        return RET_INVALID_IP; //Could also be a "Service temporarily unavailable" error.
     }
 
     int bytesParsed = 0;
@@ -817,6 +800,7 @@ int checkAuthoritativeAnswer(struct DNS_MESSAGE* response, RR_TYPE query_type, s
 		RR_TYPE types[2];
 		types[0] = MESSAGE_QTYPE_AAAA;
 		types[1] = MESSAGE_QTYPE_RRSIG;
+		
 		return assignAnswer(*answer, response->answer, ret.answer_count, types, 2, answer);
 	} else {
 		fprintf(stderr, "Not sure what is being queried for.\n");
@@ -874,6 +858,7 @@ int queryForNameAt(char* name, char* root_name, RR_TYPE query_type, struct MESSA
         	result = loopThroughRRs(name, root_name, response->answer, ret.answer_count, query_type, answer);
 
         }
+        //TODO: Should we attempt to parse the authority section here?
     } else {
     	printf("No responses.\n");
     }
