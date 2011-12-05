@@ -284,12 +284,15 @@ uint8_t getUint8(char* buf) {
 
 void parseLabel(char* buf, int* bytesParsed, struct PTR_VAL* ptrs, int* ptr_count, int* ptr_size, int recurse, int follow_ptr) {
     int start = *bytesParsed;
+    fprintf(stderr, "parsinglabel.\n");
     while (1) {
         //Get size of label
         uint8_t curSize = (uint8_t) *(buf + *bytesParsed);
+        fprintf(stderr, "curSize: %u\n", curSize);
 
         // We have a pointer
         if ((curSize & 0xC0) == 0xC0 && follow_ptr == 1) {
+            fprintf(stderr, "found pointer.\n");
             uint16_t ptr = 0;
             memcpy(&ptr, buf + *bytesParsed, sizeof(uint16_t));
             ptr = ntohs(ptr);
@@ -329,8 +332,12 @@ void copyLabel(char* buf, uint8_t* dest, int start, struct PTR_VAL* ptrs, int pt
     int j = 0;
     int destItr = 0;
     int srcItr = start;
+    printf("copying label. ptrcount: %d\n", ptrCount);
     for (; j < ptrCount; j++) {
+        fprintf(stderr, "pointer start: %d\n", ptrs[j].pointerStart);
         if (srcItr < ptrs[j].pointerStart) {
+            fprintf(stderr, "src: %d dest: %d\n", srcItr, destItr);
+            fprintf(stderr, "copying from %d to %d\n.", destItr, ptrs[j].pointerStart - srcItr);
             memcpy(dest + destItr, buf + srcItr, ptrs[j].pointerStart - srcItr);
             destItr += ptrs[j].pointerStart - srcItr;
             srcItr += (ptrs[j].pointerStart - srcItr);
@@ -972,6 +979,55 @@ void strtolower(char str[]) {
  	}
 }
 
+void testParseLabel() {
+    char* buf = (char*) malloc(sizeof(char) * 1000);
+    struct PTR_VAL ptrs[255];
+    struct MESSAGE_RESOURCE_RECORD rr;
+    uint32_t ip = htonl(0x0);
+    rr.ttl = 10000;
+    rr.type = htons(MESSAGE_QTYPE_A);
+    rr.rdlength = htons(32);
+    rr.rd_data = (void *) &ip;
+    int ptrCount = 0;
+    int ptrSize = 0;
+    int bytesParsed = 0;
+
+    buf[0] = 0x03; // 3
+    buf[1] = 0x77; // w
+    buf[2] = 0x77; // w
+    buf[3] = 0x77; // w
+    buf[4] = 0x01; // 1
+    buf[5] = 0x61; // a
+    buf[6] = 0x03; // 3
+    buf[7] = 0x63; // c
+    buf[8] = 0x6f; // o
+    buf[9] = 0x6d; // m
+    buf[10] = 0x00; // 0
+    buf[11] = 0x03; // 3
+    buf[12] = 0x61; // a
+    buf[13] = 0x62; // b
+    buf[14] = 0x63; // c
+    buf[15] = 0xC0; // ptr
+    buf[16] = 0x06; // 6
+    buf[17] = 0x01; // 1
+    buf[18] = 0x7a; // z
+    buf[19] = 0xC0; // ptr
+    buf[20] = 0x0b; // 11
+    buf[21] = 0xC0; // ptr
+    buf[22] = 0x11; // 17
+
+    bytesParsed = 21;
+    int startPos = bytesParsed;
+    parseLabel(buf, &bytesParsed, ptrs, &ptrCount, &ptrSize, 0, 1);
+
+    int labelSize = ((bytesParsed - startPos) - (ptrCount)) + ptrSize;
+    printf("labelSize: %d\n", labelSize);
+    rr.name = (uint8_t *) malloc(labelSize);
+    copyLabel(buf, rr.name, startPos, ptrs, ptrCount, ptrSize, labelSize);
+
+    printRr(&rr, htons(1), "TEST");
+}
+
 int main(int argc, char *argv[]) {
     char *name = (char*)malloc(sizeof(char) * 1024);
 
@@ -1012,4 +1068,5 @@ int main(int argc, char *argv[]) {
 
     return ret;
     //testLabelSerdes(name);
+    //testParseLabel();
 }
