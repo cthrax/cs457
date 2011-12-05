@@ -16,7 +16,7 @@
 #include <netdb.h>
 #include <inttypes.h>
 
-const int ROOT_COUNT = 14;
+/*const int ROOT_COUNT = 14;
 char* ROOT_IP[14] = {
 		 "198.41.0.4"    , //a
 		 "192.228.79.201", //b
@@ -31,6 +31,10 @@ char* ROOT_IP[14] = {
 		 "193.0.14.129"  , //k
 		 "199.7.83.42"   , //l
 		 "202.12.27.33"  , //m
+};*/
+const int ROOT_COUNT = 1;
+char* ROOT_IP[14] = {
+		 "198.41.0.4"    , //a
 };
 
 int sockfd;
@@ -42,13 +46,6 @@ struct PTR_VAL {
     int pointerStart;
     int start;
 };
-
-void getIPV4addr(uint32_t* in, char* out)
-{
-    uint32_t addr = ntohl(*in);
-   inet_ntop(AF_INET, &addr, out, INET_ADDRSTRLEN);
-   printf("IP Addr: %s\n", out); 
-}
 
 char* getNextRootServer() {
     //TODO: Possibly use this function for any list of IP addresses to try
@@ -208,7 +205,11 @@ void createLabelFromChar(char* str, uint8_t** label) {
     // Breakdown:
     // each '.' is replaced with a string length octet in the label
     // the '\0' is replaced with the 0 length size
-    (*label) = (uint8_t*) malloc(sizeof(uint8_t) * strLen);
+    (*label) = (uint8_t*) malloc((sizeof(uint8_t) * strLen) + 1);
+    if (*label == NULL) {
+        fprintf(stderr, "Malloc failed.\n");
+        exit(2);
+    }
 
     uint8_t* itr = (*label);
 
@@ -216,12 +217,16 @@ void createLabelFromChar(char* str, uint8_t** label) {
     (*itr) = 0;
     itr++;
     cur = *(str + counter);
-    while (1) {
+    while (1 && strLen > 0) {
         if (cur == '\0') {
             // Go back and set size
-            (*(itr-size - 1)) = size;
-            // Add zero length for label termination
-            *(itr++) = 0;
+            if (size == 0) {
+                (*(itr - 1)) = size;
+            } else {
+                (*(itr - size - 1)) = size;
+                // Add zero length for label termination
+                *(itr) = 0;
+            }
             break;
         }
 
@@ -699,7 +704,7 @@ int sendQuery(char* hostToResolve, char* dns_server, RR_TYPE query_type, struct 
 
 int getResponse(struct DNS_MESSAGE* response, struct sockaddr_in* server) {
     char* data = malloc(sizeof(char) * MAX_UDP_SIZE);
-    socklen_t recvLen;
+    int recvLen = sizeof(server);
     
     //Setup for client timeout
 	struct timeval  t;
