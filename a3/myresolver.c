@@ -16,7 +16,7 @@
 #include <netdb.h>
 #include <inttypes.h>
 
-/*const int ROOT_COUNT = 14;
+const int ROOT_COUNT = 14;
 char* ROOT_IP[14] = {
 		 "198.41.0.4"    , //a
 		 "192.228.79.201", //b
@@ -31,10 +31,6 @@ char* ROOT_IP[14] = {
 		 "193.0.14.129"  , //k
 		 "199.7.83.42"   , //l
 		 "202.12.27.33"  , //m
-};*/
-const int ROOT_COUNT = 1;
-char* ROOT_IP[14] = {
-		 "198.41.0.4"    , //a
 };
 
 int sockfd;
