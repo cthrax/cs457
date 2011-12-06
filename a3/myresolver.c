@@ -287,15 +287,12 @@ uint8_t getUint8(char* buf) {
 
 void parseLabel(char* buf, int* bytesParsed, struct PTR_VAL* ptrs, int* ptr_count, int* ptr_size, int recurse, int follow_ptr) {
     int start = *bytesParsed;
-    fprintf(stderr, "parsinglabel.\n");
     while (1) {
         //Get size of label
         uint8_t curSize = (uint8_t) *(buf + *bytesParsed);
-        fprintf(stderr, "curSize: %u\n", curSize);
 
         // We have a pointer
         if ((curSize & 0xC0) == 0xC0 && follow_ptr == 1) {
-            fprintf(stderr, "found pointer.\n");
             uint16_t ptr = 0;
             memcpy(&ptr, buf + *bytesParsed, sizeof(uint16_t));
             ptr = ntohs(ptr);
@@ -335,12 +332,8 @@ void copyLabel(char* buf, uint8_t* dest, int start, struct PTR_VAL* ptrs, int pt
     int j = 0;
     int destItr = 0;
     int srcItr = start;
-    printf("copying label. ptrcount: %d\n", ptrCount);
     for (; j < ptrCount; j++) {
-        fprintf(stderr, "pointer start: %d\n", ptrs[j].pointerStart);
         if (srcItr < ptrs[j].pointerStart) {
-            fprintf(stderr, "src: %d dest: %d\n", srcItr, destItr);
-            fprintf(stderr, "copying from %d to %d\n.", destItr, ptrs[j].pointerStart - srcItr);
             memcpy(dest + destItr, buf + srcItr, ptrs[j].pointerStart - srcItr);
             destItr += ptrs[j].pointerStart - srcItr;
             srcItr += (ptrs[j].pointerStart - srcItr);
@@ -1082,7 +1075,6 @@ void testParseLabel() {
     parseLabel(buf, &bytesParsed, ptrs, &ptrCount, &ptrSize, 0, 1);
 
     int labelSize = ((bytesParsed - startPos) - (ptrCount)) + ptrSize;
-    printf("labelSize: %d\n", labelSize);
     rr.name = (uint8_t *) malloc(labelSize);
     copyLabel(buf, rr.name, startPos, ptrs, ptrCount, ptrSize, labelSize);
 
