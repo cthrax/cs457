@@ -971,6 +971,7 @@ int addToStack(char *name, char* ip) {
         struct STACK_ELE **newStack = (struct STACK_ELE**) malloc(sizeof(struct STACK_ELE *) * (stackSize + 1));
         struct STACK_ELE *newMatch = (struct STACK_ELE*) malloc(sizeof(struct STACK_ELE));
         newMatch->name = malloc(sizeof(char) * strlen(name) + 1);
+        newMatch->ipSize = 1;
         memcpy(newMatch->name, name, strlen(name));
 
         for (i=0; i < stackSize; i++) {
