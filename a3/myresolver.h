@@ -15,6 +15,8 @@ const int RET_FOUND_ANSWER = 0;
 const int RET_INVALID_IP = 1;
 const int RET_INVALID_RESPONSE = 2;
 const int RET_ANSWER_NOT_FOUND = 3;
+const int RET_ATTEMPTED_RECURSE = 4;
+const int RET_NO_RECURSION_FOUND = 5;
 const int RET_ABORT = -1;
 const int RET_NO_SUCH_NAME = -2;
 
@@ -185,6 +187,12 @@ struct RR_KEY {
 	char* key;
 	
 }__attribute__((__packed__));
+
+struct STACK_ELE {
+    char* name;
+    char** ips;
+    int ipSize;
+};
 
 struct LABEL_LIST* parseLabels(char* str);
 int loopThroughList(char* name, char** list, int count, RR_TYPE query_type, struct MESSAGE_RESOURCE_RECORD** answer);

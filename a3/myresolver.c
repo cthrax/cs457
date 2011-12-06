@@ -33,6 +33,9 @@ char* ROOT_IP[14] = {
 		 "202.12.27.33"  , //m
 };
 
+struct STACK_ELE** stack;
+int stackSize = 0;
+
 int sockfd;
 socklen_t server_size;
 int cur_root_server = 0;
@@ -817,6 +820,11 @@ int checkAuthoritativeAnswer(struct DNS_MESSAGE* response, RR_TYPE query_type, s
 }
 
 int queryForNameAt(char* name, char* root_name, RR_TYPE query_type, struct MESSAGE_RESOURCE_RECORD** answer) {
+    if (addToStack(name, root_name) != RET_NO_RECURSION_FOUND) {
+        fprintf(stderr, "Attempted infinite recursion. Aborted.\n");
+        return RET_ATTEMPTED_RECURSE;
+    }
+
     struct sockaddr_in server;
     int serverRet = 0;
     if ((serverRet = initServer(&server, root_name)) != 0) {
@@ -943,6 +951,59 @@ int loopThroughRRs(char* name, char* last_root, struct MESSAGE_RESOURCE_RECORD* 
 	}
 
 	return RET_ANSWER_NOT_FOUND;
+}
+
+int addToStack(char *name, char* ip) {
+    int i = 0;
+    struct STACK_ELE *match = NULL;
+
+    // See if we have a match already
+    for (; i < stackSize; i++) {
+        struct STACK_ELE *cur = stack[i];
+        if (strcmp(name, cur->name) == 0) {
+            int j = 0;
+            match = cur;
+            for (; j < cur->ipSize; j++) {
+                if (strcmp(cur->ips[j], ip) == 0) {
+                    return RET_ATTEMPTED_RECURSE;
+                }
+            }
+            break;
+        }
+    }
+
+    // No match, let's add in the new record, this is the least efficient
+    // method possible but it works.
+    if (match == NULL) {
+        struct STACK_ELE **newStack = (struct STACK_ELE**) malloc(sizeof(struct STACK_ELE *) * (stackSize + 1));
+        struct STACK_ELE *newMatch = (struct STACK_ELE*) malloc(sizeof(struct STACK_ELE));
+        newMatch->name = malloc(sizeof(name));
+        memcpy(newMatch->name, name, strlen(name));
+
+        for (i=0; i < stackSize; i++) {
+            newStack[i] = stack[i];
+        }
+        free(stack);
+
+        newStack[stackSize] = newMatch;
+        ++stackSize;
+        match = newMatch;
+        stack = newStack;
+    }
+
+    char* newIp = (char*) malloc(sizeof(char) * strlen(ip));
+    memcpy(newIp, ip, strlen(ip));
+    char** newIps = (char**) malloc(sizeof(char *) * (match->ipSize + 1));
+
+    for (i = 0; i < match->ipSize; i++) {
+        newIps[i] = match->ips[i];
+    }
+    free(match->ips);
+
+    newIps[match->ipSize] = newIp;
+    match->ipSize++;
+    match->ips = newIps;
+    return RET_NO_RECURSION_FOUND;
 }
 
 void init() {
