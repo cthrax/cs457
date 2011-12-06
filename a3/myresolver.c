@@ -984,7 +984,7 @@ int addToStack(char *name, char* ip) {
         stack = newStack;
     }
 
-    char* newIp = (char*) malloc(sizeof(char) * strlen(ip));
+    char* newIp = (char*) malloc(sizeof(char) * strlen(ip) + 1);
     memcpy(newIp, ip, strlen(ip));
     char** newIps = (char**) malloc(sizeof(char *) * (match->ipSize + 1));
 
