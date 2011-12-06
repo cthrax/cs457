@@ -372,7 +372,7 @@ void parseRdLabel(void** dest, char* src, int *bytesParsed, int follow_ptr) {
 	// No pointer label = bytesParsed - startPos
 	// Each pointer has 2 bytes not copied
 	// The total number of pointers has ptrSize bytes
-	int labelSize = ((*bytesParsed - startPos) - (ptrCount * 2)) + ptrSize;
+	int labelSize = ((*bytesParsed - startPos) - (ptrCount)) + ptrSize;
 	*dest = (uint8_t *) malloc(labelSize + 1);
 	copyLabel(src, *dest, startPos, ptrs, ptrCount, ptrSize, labelSize);
 }
@@ -482,7 +482,7 @@ void getQuestion(struct MESSAGE_QUESTION** question, int count, int *bytesParsed
     		// No pointer label = bytesParsed - startPos
     		// Each pointer has 2 bytes not copied
     		// The total number of pointers has ptrSize bytes
-    		int labelSize = ((*bytesParsed - startPos) - (ptrCount * 2)) + ptrSize;
+    		int labelSize = ((*bytesParsed - startPos) - (ptrCount)) + ptrSize;
     		newMsg->qname = (uint8_t *) malloc(labelSize);
     		copyLabel(buf, newMsg->qname, startPos, ptrs, ptrCount, ptrSize, labelSize);
 
@@ -520,7 +520,7 @@ void getResourceRecord(struct MESSAGE_RESOURCE_RECORD** record, int count, int *
     		// No pointer label = bytesParsed - startPos
     		// Each pointer has 2 bytes not copied
     		// The total number of pointers has ptrSize bytes
-    		int labelSize = ((*bytesParsed - startPos) - (ptrCount * 2)) + ptrSize;
+    		int labelSize = ((*bytesParsed - startPos) - (ptrCount)) + ptrSize;
     		newRecord->name = (uint8_t *) malloc(labelSize);
     		copyLabel(buf, newRecord->name, startPos, ptrs, ptrCount, ptrSize, labelSize);
 
