@@ -973,7 +973,7 @@ int addToStack(char *name, char* ip) {
         newMatch->name = malloc(sizeof(char) * strlen(name) + 1);
         newMatch->ipSize = 0;
         newMatch->ips = (char **) malloc(sizeof(char*));
-        memcpy(newMatch->name, name, strlen(name));
+        memcpy(newMatch->name, name, strlen(name) + 1);
 
         for (i=0; i < stackSize; i++) {
             newStack[i] = stack[i];
