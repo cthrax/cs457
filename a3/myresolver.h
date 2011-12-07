@@ -34,8 +34,8 @@ const RR_TYPE MESSAGE_QTYPE_RRSIG = 0x002E;
 
 //QR
 const uint16_t DNS_QR_MASK = 0x8000; //1000 0000 0000 0000
-const uint16_t DNS_QR_TYPE_QUERY = 0x0000; //1000 0000 0000 0000
-const uint16_t DNS_QR_TYPE_RESPONSE = 0x8000; //0000 0000 0000 0000
+const uint16_t DNS_QR_TYPE_QUERY = 0x0000; //0000 0000 0000 0000
+const uint16_t DNS_QR_TYPE_RESPONSE = 0x8000; //1000 0000 0000 0000
 
 //opcode
 const uint16_t DNS_OPCODE_MASK = 0x7800; //0111 1000 0000 0000
@@ -106,6 +106,7 @@ struct DNS_MESSAGE {
     struct MESSAGE_RESOURCE_RECORD* answer;
     struct MESSAGE_RESOURCE_RECORD* authority;
     struct MESSAGE_RESOURCE_RECORD* additional;
+    struct MESSAGE_RESOURCE_RECORD* ends;
 }__attribute__((__packed__));
 
 struct LABEL_LIST {
@@ -166,6 +167,7 @@ struct RR_AAAA {
 	uint8_t ip[16];
 }__attribute__((__packed__));
 
+
 struct RR_SIG {
 	uint16_t type_covered;
 	uint8_t algorithm;
@@ -180,6 +182,14 @@ struct RR_SIG {
 	char* signature;
 }__attribute__((__packed__));
 
+
+
+/*
+struct final_answer {
+		int count;
+		struct MESSAGE_RESOURCE_RECORD* answers;
+};
+*/
 struct RR_KEY {
 	uint16_t flags;
 	uint8_t  protocol;

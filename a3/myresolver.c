@@ -166,6 +166,15 @@ void sendDnsMessage(struct DNS_MESSAGE* message, struct sockaddr_in* server) {
     	// Append class
     	appendToBuffer(&itr, &(cur->qclass), sizeof(cur->qclass), &packet_size);
     }
+    
+    struct MESSAGE_RESOURCE_RECORD * cur = message->additional;
+    // Send RR Struct for RRSIG
+    appendToBuffer(&itr, cur->name, 1, &packet_size);
+    appendToBuffer(&itr, &(cur->type), 2, &packet_size);
+    appendToBuffer(&itr, &(cur->class), 2, &packet_size);
+    appendToBuffer(&itr, &(cur->ttl), 4, &packet_size);
+    appendToBuffer(&itr, &(cur->rdlength), 2, &packet_size);
+    
     sendNumBytes(buf, packet_size, server);
 }
 
@@ -462,6 +471,7 @@ void parseRdata(void** dest, char* src, int bytesParsed, RR_TYPE type, uint16_t 
 	}
 }
 
+
 void getQuestion(struct MESSAGE_QUESTION** question, int count, int *bytesParsed, char* buf) {
     if (count > 0) {
     	*question = (struct MESSAGE_QUESTION*)malloc(sizeof(struct MESSAGE_QUESTION) * count);
@@ -679,11 +689,24 @@ void printDnsMessage(struct DNS_MESSAGE* message) {
 int sendQuery(char* hostToResolve, char* dns_server, RR_TYPE query_type, struct sockaddr_in* server) {
     struct DNS_MESSAGE test_message;
     test_message.header.id = htons(10);
-    test_message.header.additional_count = htons(0);
+    test_message.header.additional_count = htons(1);					// Set the Additional Bit for RRSIG Query
     test_message.header.answer_count = htons(0);
     test_message.header.description = htons(0);
     test_message.header.nameserver_count = htons(0);
     test_message.header.question_count = htons(1);
+    
+    struct MESSAGE_RESOURCE_RECORD edns;
+    // Setting the Bits for RRSIG Struct
+    edns.name = (uint8_t *) malloc(sizeof(uint8_t));
+    (*(edns.name)) = 0x00;
+    edns.type = htons(0x0029);			// From Wireshark
+    edns.class = htons(4096);
+    edns.ttl =htonl(0);
+    edns.ttl = htonl(0x00000000 | 0x80008000);
+    edns.rdlength = htons(0);
+   	edns.rd_data = NULL;
+   	
+   	test_message.additional = &edns;
 
     test_message.question = (struct MESSAGE_QUESTION*) malloc(sizeof(struct MESSAGE_QUESTION));
 
@@ -697,7 +720,7 @@ int sendQuery(char* hostToResolve, char* dns_server, RR_TYPE query_type, struct 
     fprintf(stderr, "Trying DNS server %s\n", dns_server);
     //printDnsMessage(&test_message);
     sendDnsMessage(&test_message, server);
-    printf("done sending... wait for reply!\n");
+    printf("Done sending... wait for reply!\n");
     return 0;
 }
 
@@ -839,8 +862,10 @@ int queryForNameAt(char* name, char* root_name, RR_TYPE query_type, struct MESSA
     	return RET_INVALID_RESPONSE;
     } else if (ret.description.auth_answer == DNS_AA_TRUE &&
     		ret.description.resp_code == DNS_RCODE_NAME_ERROR) {
-    	fprintf(stderr, "No such name.\n");
+    	fprintf(stderr, "The hostname does not exist.\n");						// Changed today 06Dec
+    	exit(2);
     	return RET_NO_SUCH_NAME;
+    	
     } else if (ret.description.resp_code != DNS_RCODE_NOERROR) {
     	fprintf(stderr, "Invalid response type.\n");
     	return RET_INVALID_RESPONSE;
@@ -908,7 +933,7 @@ int loopThroughRRs(char* name, char* last_root, struct MESSAGE_RESOURCE_RECORD* 
 			int lrLen = strlen(last_root);
 
 			if (nsLen >= lrLen) {
-				if (strcmp(last_root, ns + (nsLen - lrLen)) == 0) {
+				if (strcmp(ns, last_root + (nsLen - lrLen)) == 0) {
 					fprintf(stderr, "Attempted infinite recursion (1). Skipping.\n");
 					// Skip to next one in list.
 					continue;
@@ -1033,6 +1058,11 @@ void strtolower(char str[]) {
 			str[i] = str[i] + 'a' - 'A';
 		}
  	}
+ 	printf("Hostname entered is Lowered. \n");
+ 	for (i = 0; str[i] != '\0'; ++i) {
+ 	printf("%c",str[i]);
+ 	}
+ 	printf("\n--------------------------\n");
 }
 
 void testParseLabel() {
@@ -1087,8 +1117,8 @@ int main(int argc, char *argv[]) {
     char *name = (char*)malloc(sizeof(char) * 1024);
 
     if (argc == 1) {
-    	memcpy(name, "www.google.com.", 16);
-        //name = "www.google.com."; //For now, simply use a hard-coded domain.
+    	memcpy(name, "www.nlnetlabs.nl", 16);
+        
     } else if (argc == 2) {
 		if (strlen(argv[1]) >= 1024) {
 			fprintf(stderr, "Invalid hostname, too long.\n");
@@ -1109,12 +1139,25 @@ int main(int argc, char *argv[]) {
     }
 
     init();
+    /*
+    struct t {
+		int count;
+		struct MESSAGE_RESOURCE_RECORD* answers;
+	}
+	t.answers = malloc(count);
+	memcpy(t.answers, message.answers, sizeof(struct MESSAGE_RESOURCE_RECORD) * count)
+    */
     struct MESSAGE_RESOURCE_RECORD* answer;
+   
+       
     int ret = loopThroughList(name, ROOT_IP, ROOT_COUNT, MESSAGE_QTYPE_AAAA, &answer);
     if (ret == RET_FOUND_ANSWER) {
-    	printRr(answer, 256, "FOUND ULTIMATE ANSWER\n");
+	//	for (int i = 0; i < t.count; i++) {
+	//		if (t.answers + i)->type == MESSAGE_QTYPE_AAAA )
+    	printRr(answer, htons(256), "Answer Found.\n");
+    	
     } else if (ret == RET_NO_SUCH_NAME) {
-    	printf("No record of that type.\n");
+    	printf("No AAAA records are associated with the name\n");
     } else {
     	printf("No record found.\n");
     }
