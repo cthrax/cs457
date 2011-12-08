@@ -16,8 +16,8 @@
 #include <netdb.h>
 #include <inttypes.h>
 
-const int ROOT_COUNT = 14;
-char* ROOT_IP[14] = {
+const int ROOT_COUNT = 13; // Fixed. was 14, which would cause a segfault since we only had 13 IPs.
+char* ROOT_IP[13] = {
 		 "198.41.0.4"    , //a
 		 "192.228.79.201", //b
 		 "192.33.4.12"   , //c
@@ -1154,7 +1154,7 @@ int main(int argc, char *argv[]) {
     if (ret == RET_FOUND_ANSWER) {
 	//	for (int i = 0; i < t.count; i++) {
 	//		if (t.answers + i)->type == MESSAGE_QTYPE_AAAA )
-    	printRr(answer, htons(256), "Answer Found.\n");
+    	printRr(answer, (256), "Answer Found.\n"); // fixed segfault, was print (answer, ntohl(256), blah) which tried to print way too many characters. 
     	
     } else if (ret == RET_NO_SUCH_NAME) {
     	printf("No AAAA records are associated with the name\n");
