@@ -421,7 +421,7 @@ void parseSOA(void** dest, char* src, int bytesParsed) {
 }
 
 void parseRRSIG(void** dest, char* src, int bytesParsed, uint16_t len) {
-	*dest = malloc(sizeof(struct RR_SOA));
+	*dest = malloc(sizeof(struct RR_SIG));//was RR_SOA...
 	struct RR_SIG *s = (struct RR_SIG*)*dest;
 	int start = bytesParsed;
 
@@ -445,11 +445,16 @@ void parseRRSIG(void** dest, char* src, int bytesParsed, uint16_t len) {
 
 	s->key_tag = getUint16(src + bytesParsed);
 	bytesParsed += sizeof(uint16_t);
-
+	fprintf(stderr, "debugx: %u\n", bytesParsed-start+1);
+	s->signer_name = malloc (sizeof(char) * bytesParsed-start+1);//why does this improve things? does the lower malloc fail?
 	parseRdLabel((void**)&(s->signer_name), src, &bytesParsed, 0);
-
+	char temp[128];
+	createCharFromLabel(s->signer_name, temp);
+	fprintf(stderr, "debug1:%s\n", temp);
+	fprintf(stderr, "done?", temp);
 	// Assume signature is remaining bytes.
-	memcpy(&s->signature, src + bytesParsed, bytesParsed - start);
+	s->signature = malloc(sizeof(char) * (bytesParsed - start + 1));
+	memcpy(&s->signature, src + bytesParsed, bytesParsed - start);//s->signature
 }
 
 void parseRdata(void** dest, char* src, int bytesParsed, RR_TYPE type, uint16_t len) {
@@ -635,7 +640,23 @@ void printAAAA(char* name, char* rrType, char* class, uint16_t ttl, uint16_t rdL
 	inet_ntop(AF_INET6, rd_data, ip, INET6_ADDRSTRLEN);
 	printf("%s %u %s %s %u %s\n", name, ttl, "IN", rrType, rdLen, ip);
 }
+void printRRSig(char* name, char* rrType, char* class, uint16_t ttl, uint16_t rdLen, void* rd_data) {
+	printf("Trying to print a RRSig\n");
+	struct RR_SIG* theSig = (struct RR_SIG*) rd_data;//cast taht stuff. 
+	printf("%s %u %s %s %u ", name, ttl, "IN RRSIG", "AAAA", rdLen);
+	char TEMP[128];
+	createCharFromLabel(theSig->signer_name, TEMP);
+	printf("%u %u %u %u %u %u %u %s\n", ntohs(theSig->type_covered), theSig->algorithm, theSig->labels, ntohl(theSig->ttl), ntohl(theSig->sig_expiration), ntohl(theSig->sig_inception), ntohs(theSig->key_tag), TEMP);
+	//print out the sig itself...
+	int i = strlen(theSig->signer_name);
+	char* nxt = theSig->signer_name + i;
+	for(; i<(rdLen - sizeof(struct RR_SIG)); i++){
+		fprintf(stderr,"%c", *nxt);
+		nxt++;
+	}
+	printf("\n");
 
+}
 void printRr(struct MESSAGE_RESOURCE_RECORD* rr, uint16_t count, char* title) {
     count = ntohs(count);
     printf("%s", title);
@@ -659,6 +680,8 @@ void printRr(struct MESSAGE_RESOURCE_RECORD* rr, uint16_t count, char* title) {
         	printA(name, rrType, "IN", ttl, rdLen, rd_data);
         } else if (type == MESSAGE_QTYPE_AAAA) {
         	printAAAA(name, rrType, "IN", ttl, rdLen, rd_data);
+        } else if (type == MESSAGE_QTYPE_RRSIG) {
+        	printRRSig(name, rrType, "IN", ttl, rdLen, rd_data);
         } else {
         	printf("%s %u %s %s %u\n", name, ttl, "IN", rrType, rdLen);
         }
@@ -779,33 +802,45 @@ int initServer(struct sockaddr_in* server, char* dns_server) {
 
 int assignAnswer(struct MESSAGE_RESOURCE_RECORD* dest, struct MESSAGE_RESOURCE_RECORD* list, uint16_t listCount, RR_TYPE* query_types, int typeCount, struct MESSAGE_RESOURCE_RECORD** answer) {
 	int i = 0;
-
+	int hasAAAA = 0;
+	printf("Starting AA\n");//TODO remove
 	for (; i < listCount; i++) {
 		struct MESSAGE_RESOURCE_RECORD* cur = (list + i);
-
+		
 		int j = 0;
 		for (; j < typeCount; j++) {
 			if (ntohs(cur->type) == query_types[j]) {
 				memcpy(dest, cur, sizeof(struct MESSAGE_RESOURCE_RECORD));
 				fprintf(stderr, "Found an answer to NS query.\n");
-				return RET_FOUND_ANSWER;
+				if(ntohs(cur->type) == MESSAGE_QTYPE_RRSIG)
+				{
+				    printRr(dest, 256, "TEST!!!\n");
+				}
+				else
+				{
+				    printRr(dest, 256, "Answer Found in AA\n");
+				}
+				hasAAAA=1;
+				
 			}
 		}
 
-		if (ntohs(cur->type) == MESSAGE_QTYPE_CNAME) {
+		if (ntohs(cur->type) == MESSAGE_QTYPE_CNAME && hasAAAA==0) {
 			char cname[1024];
 			createCharFromLabel(((struct RR_CNAME*)cur->rd_data)->name, cname);
 			fprintf(stderr, "Found CNAME: %s\n", cname);
 			return loopThroughList(cname, ROOT_IP, ROOT_COUNT, MESSAGE_QTYPE_AAAA, answer);
 		}
 
-		if (ntohs(cur->type) == MESSAGE_QTYPE_SOA) {
+		if (ntohs(cur->type) == MESSAGE_QTYPE_SOA && hasAAAA==0) {
 			fprintf(stderr, "Not sure what to do about the SOA yet. \n");
 			return RET_ANSWER_NOT_FOUND;
 		}
 	}
-
-	return RET_ANSWER_NOT_FOUND;
+	if(hasAAAA==1)
+	    return RET_FOUND_ANSWER;
+	else
+	    return RET_ANSWER_NOT_FOUND;
 }
 
 int checkAuthoritativeAnswer(struct DNS_MESSAGE* response, RR_TYPE query_type, struct MESSAGE_RESOURCE_RECORD** answer) {
@@ -816,6 +851,7 @@ int checkAuthoritativeAnswer(struct DNS_MESSAGE* response, RR_TYPE query_type, s
 
 	// likely parsing ns records.
 	if (query_type == MESSAGE_QTYPE_A) {
+		printf("Error check1\n");
 		*answer = (struct MESSAGE_RESOURCE_RECORD*) malloc(sizeof(struct MESSAGE_RESOURCE_RECORD));
 		RR_TYPE types[1];
 		types[0] = MESSAGE_QTYPE_A;
@@ -823,6 +859,7 @@ int checkAuthoritativeAnswer(struct DNS_MESSAGE* response, RR_TYPE query_type, s
 
 	// likely parsing the AAAA with RRSIG
 	} else if (query_type == MESSAGE_QTYPE_AAAA) {
+		printf("Error check2\n");
 		*answer = (struct MESSAGE_RESOURCE_RECORD*) malloc(sizeof(struct MESSAGE_RESOURCE_RECORD) * 2);
 		RR_TYPE types[2];
 		types[0] = MESSAGE_QTYPE_AAAA;
@@ -933,7 +970,7 @@ int loopThroughRRs(char* name, char* last_root, struct MESSAGE_RESOURCE_RECORD* 
 			int lrLen = strlen(last_root);
 
 			if (nsLen >= lrLen) {
-				if (strcmp(ns, last_root + (nsLen - lrLen)) == 0) {
+				if (strcmp(last_root, ns + (nsLen - lrLen)) == 0) {
 					fprintf(stderr, "Attempted infinite recursion (1). Skipping.\n");
 					// Skip to next one in list.
 					continue;
