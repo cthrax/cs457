@@ -447,21 +447,47 @@ void parseRRSIG(void** dest, char* src, int bytesParsed, uint16_t len) {
 	bytesParsed += sizeof(uint16_t);
 	fprintf(stderr, "debugx: %u\n", bytesParsed-start+1);
 	s->signer_name = malloc (sizeof(char) * bytesParsed-start+1);//why does this improve things? does the lower malloc fail?
+	fprintf(stderr,"TEST: %c\n", src+bytesParsed);
 	parseRdLabel((void**)&(s->signer_name), src, &bytesParsed, 0);
 	char temp[128];
+	bytesParsed += sizeof(s->signer_name);
 	createCharFromLabel(s->signer_name, temp);
 	fprintf(stderr, "debug1:%s\n", temp);
 	fprintf(stderr, "done?", temp);
 	// Assume signature is remaining bytes.
-	s->signature = malloc(sizeof(char) * (bytesParsed - start + 1));
-	memcpy(&s->signature, src + bytesParsed, bytesParsed - start);//s->signature
+	s->signature = malloc(sizeof(char) * (len -(bytesParsed - start)+1));
+	fprintf(stderr, "start at: %c go for: %u,\n", (src+bytesParsed), (bytesParsed-start));
+	//src + bytesParsed is NOT where we want to memcpy from!!! that's the middle of a char table! 
+	//memcpy(&s->signature, (void*)(src), bytesParsed - start);//s->signature
+	fprintf(stderr, "VALUES, LEN = %u , and parsed-start =  %u\n", len, (bytesParsed-start));
+	uint16_t *test = malloc(sizeof(char) * (len - (bytesParsed-start)+1));
+	memcpy((void*)test, (void*)(src+bytesParsed), len-(bytesParsed-start));
+	//memcpy(s->signature, (void*)(src + bytesParsed), len - (bytesParsed - start));
+	int i = ((sizeof(char) * len-(bytesParsed-start))/4);
+	int k = 0;
+	fprintf(stderr, " memsize = %u , num32s = %u \n", (sizeof(char)*len-(bytesParsed-start)),i);
+	for(; k < i; k++)
+	{
+	    fprintf(stderr," %u ->", test[k]);
+	    ntohl(test[k]);
+	    fprintf(stderr, " %u \n", test[k]);
+	    //we need some way to conver to chars properly....
+	}
+	char* OUT = test;
+	fprintf(stderr, " wuttt %s \n", OUT);
+	memcpy(s->signature, (void*)OUT, len-(bytesParsed-start));
+	//Right now... memcpy(test ...) loads it up with 0s. Not okay... 
+	//test
+
 }
 
 void parseRdata(void** dest, char* src, int bytesParsed, RR_TYPE type, uint16_t len) {
 	if (type == MESSAGE_QTYPE_A) {
 		parseA(dest, src + bytesParsed, len);
+		//bytesParsed += sizeof(uint32_t);
 	} else if (type == MESSAGE_QTYPE_AAAA) {
 		parseAAAA(dest, src + bytesParsed, len);
+		//bytesParsed += sizeof(uint8_t)*16;
 	} else if (type == MESSAGE_QTYPE_CNAME) {
 		parseCNAME(dest, src, bytesParsed);
 	} else if (type == MESSAGE_QTYPE_NS) {
@@ -648,12 +674,13 @@ void printRRSig(char* name, char* rrType, char* class, uint16_t ttl, uint16_t rd
 	createCharFromLabel(theSig->signer_name, TEMP);
 	printf("%u %u %u %u %u %u %u %s\n", ntohs(theSig->type_covered), theSig->algorithm, theSig->labels, ntohl(theSig->ttl), ntohl(theSig->sig_expiration), ntohl(theSig->sig_inception), ntohs(theSig->key_tag), TEMP);
 	//print out the sig itself...
-	int i = strlen(theSig->signer_name);
+	printf("%s\n", theSig->signature);
+	/*int i = strlen(theSig->signer_name);
 	char* nxt = theSig->signer_name + i;
 	for(; i<(rdLen - sizeof(struct RR_SIG)); i++){
 		fprintf(stderr,"%c", *nxt);
 		nxt++;
-	}
+	}*/
 	printf("\n");
 
 }
