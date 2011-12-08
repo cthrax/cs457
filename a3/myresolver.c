@@ -213,7 +213,7 @@ void createLabelFromChar(char* str, uint8_t** label) {
     // Breakdown:
     // each '.' is replaced with a string length octet in the label
     // the '\0' is replaced with the 0 length size
-    (*label) = (uint8_t*) malloc((sizeof(uint8_t) * strLen) + 1);
+    (*label) = (uint8_t*) malloc((sizeof(uint8_t) * strLen) + 2);
     if (*label == NULL) {
         fprintf(stderr, "Malloc failed.\n");
         exit(2);
@@ -421,7 +421,7 @@ void parseSOA(void** dest, char* src, int bytesParsed) {
 }
 
 void parseRRSIG(void** dest, char* src, int bytesParsed, uint16_t len) {
-	*dest = malloc(sizeof(struct RR_SIG));//was RR_SOA...
+	*dest = malloc(sizeof(struct RR_SIG));
 	struct RR_SIG *s = (struct RR_SIG*)*dest;
 	int start = bytesParsed;
 
@@ -446,36 +446,36 @@ void parseRRSIG(void** dest, char* src, int bytesParsed, uint16_t len) {
 	s->key_tag = getUint16(src + bytesParsed);
 	bytesParsed += sizeof(uint16_t);
 	fprintf(stderr, "debugx: %u\n", bytesParsed-start+1);
-	s->signer_name = malloc (sizeof(char) * bytesParsed-start+1);//why does this improve things? does the lower malloc fail?
+	//s->signer_name = malloc (sizeof(char) * bytesParsed-start+1);//why does this improve things? does the lower malloc fail?
 	fprintf(stderr,"TEST: %c\n", src+bytesParsed);
 	parseRdLabel((void**)&(s->signer_name), src, &bytesParsed, 0);
-	char temp[128];
-	bytesParsed += sizeof(s->signer_name);
+	char temp[1024];
+	//bytesParsed += sizeof(s->signer_name);
 	createCharFromLabel(s->signer_name, temp);
-	fprintf(stderr, "debug1:%s\n", temp);
+	fprintf(stderr, "debug1:(%d) %s\n", strlen(temp), temp);
 	fprintf(stderr, "done?", temp);
 	// Assume signature is remaining bytes.
-	s->signature = malloc(sizeof(char) * (len -(bytesParsed - start)+1));
-	fprintf(stderr, "start at: %c go for: %u,\n", (src+bytesParsed), (bytesParsed-start));
+	s->signature = (char *) calloc((len - (bytesParsed - start)), sizeof(char));
+	fprintf(stderr, "start at: %p go for: %u,\n", (src+bytesParsed), (bytesParsed-start));
 	//src + bytesParsed is NOT where we want to memcpy from!!! that's the middle of a char table! 
 	//memcpy(&s->signature, (void*)(src), bytesParsed - start);//s->signature
 	fprintf(stderr, "VALUES, LEN = %u , and parsed-start =  %u\n", len, (bytesParsed-start));
-	uint16_t *test = malloc(sizeof(char) * (len - (bytesParsed-start)+1));
-	memcpy((void*)test, (void*)(src+bytesParsed), len-(bytesParsed-start));
+	//uint16_t *test = malloc(sizeof(char) * (len - (bytesParsed-start)+1));
+	//memcpy((void*)test, (void*)(src+bytesParsed), len-(bytesParsed-start));
 	//memcpy(s->signature, (void*)(src + bytesParsed), len - (bytesParsed - start));
-	int i = ((sizeof(char) * len-(bytesParsed-start))/4);
+	int i = ((sizeof(uint32_t) * len-(bytesParsed-start))/4);
 	int k = 0;
 	fprintf(stderr, " memsize = %u , num32s = %u \n", (sizeof(char)*len-(bytesParsed-start)),i);
 	for(; k < i; k++)
 	{
-	    fprintf(stderr," %u ->", test[k]);
-	    ntohl(test[k]);
-	    fprintf(stderr, " %u \n", test[k]);
+	    //fprintf(stderr," %u ->", test[k]);
+	    //ntohl(test[k]);
+	    //fprintf(stderr, " %u \n", test[k]);
 	    //we need some way to conver to chars properly....
 	}
-	char* OUT = test;
-	fprintf(stderr, " wuttt %s \n", OUT);
-	memcpy(s->signature, (void*)OUT, len-(bytesParsed-start));
+	//char* OUT = test;
+	//fprintf(stderr, " wuttt %s \n", OUT);
+	memcpy(s->signature, src + bytesParsed, len-(bytesParsed-start));
 	//Right now... memcpy(test ...) loads it up with 0s. Not okay... 
 	//test
 
@@ -562,7 +562,7 @@ void getResourceRecord(struct MESSAGE_RESOURCE_RECORD** record, int count, int *
     		// Each pointer has 2 bytes not copied
     		// The total number of pointers has ptrSize bytes
     		int labelSize = ((*bytesParsed - startPos) - (ptrCount)) + ptrSize;
-    		newRecord->name = (uint8_t *) malloc(labelSize);
+    		newRecord->name = (uint8_t *) malloc(labelSize + 1);
     		copyLabel(buf, newRecord->name, startPos, ptrs, ptrCount, ptrSize, labelSize);
 
     		// Populate type
@@ -673,8 +673,15 @@ void printRRSig(char* name, char* rrType, char* class, uint16_t ttl, uint16_t rd
 	char TEMP[128];
 	createCharFromLabel(theSig->signer_name, TEMP);
 	printf("%u %u %u %u %u %u %u %s\n", ntohs(theSig->type_covered), theSig->algorithm, theSig->labels, ntohl(theSig->ttl), ntohl(theSig->sig_expiration), ntohl(theSig->sig_inception), ntohs(theSig->key_tag), TEMP);
+	int len = labelLen(theSig->signer_name);
+	int count = 0;
+	int signatureLen = rdLen - (2 + 1 + 1 + 4 + 4 + 4 + 2 + len);
+	for (; count < signatureLen; count++) {
+	    fprintf(stderr, "%c", theSig->signature[count]);
+	}
+	printf("\nEND JUNK\n");
 	//print out the sig itself...
-	printf("%s\n", theSig->signature);
+	//printf("%s\n", theSig->signature);
 	/*int i = strlen(theSig->signer_name);
 	char* nxt = theSig->signer_name + i;
 	for(; i<(rdLen - sizeof(struct RR_SIG)); i++){
@@ -891,6 +898,7 @@ int checkAuthoritativeAnswer(struct DNS_MESSAGE* response, RR_TYPE query_type, s
 		RR_TYPE types[2];
 		types[0] = MESSAGE_QTYPE_AAAA;
 		types[1] = MESSAGE_QTYPE_RRSIG;
+		printDnsMessage(response);
 		
 		return assignAnswer(*answer, response->answer, ret.answer_count, types, 2, answer);
 	} else {
