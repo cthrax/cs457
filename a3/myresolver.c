@@ -53,13 +53,15 @@ int printTheSig(char* data, int len)
 	{
 		uint8_t one, two, three, four;
 		uint8_t a = *(data+i), b, c;
-		if(i+1 >= len)
+		if(i+1 >= len){
 			b = 0;
-		else
+			//This means that char2, 3, and 4 should be "="
+		}else
 			b = *(data+i+1);
-		if( i+2 >= len)
+		if( i+2 >= len){
+			//char 3 and 4 are '='
 			c = 0;
-		else
+		}else
 			c = *(data+i+2);
 		uint8_t worker1, worker2;
 		//do one
@@ -85,7 +87,12 @@ int printTheSig(char* data, int len)
 		//do four
 		worker1 = c%64;
 		four = worker1;
-		printf("%c%c%c%c", lookup[one], lookup[two], lookup[three], lookup[four]);
+		if(i+1 >= len)
+			printf("%c%c==", lookup[one], lookup[two]);
+		else if(i+2 >= len)
+			printf("%c%c%c=", lookup[one],lookup[two], lookup[three]);
+		else
+			printf("%c%c%c%c", lookup[one], lookup[two], lookup[three], lookup[four]);
 	}
 }
 
