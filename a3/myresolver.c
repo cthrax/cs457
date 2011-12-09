@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <stdio.h>
 #include "myresolver.h"
 
 #include <unistd.h>
@@ -45,6 +44,50 @@ struct PTR_VAL {
     int pointerStart;
     int start;
 };
+
+int printTheSig(char* data, int len)
+{
+	char lookup[64] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+	int i = 0;
+	for(; i < len; i+=3)
+	{
+		uint8_t one, two, three, four;
+		uint8_t a = *(data+i), b, c;
+		if(i+1 >= len)
+			b = 0;
+		else
+			b = *(data+i+1);
+		if( i+2 >= len)
+			c = 0;
+		else
+			c = *(data+i+2);
+		uint8_t worker1, worker2;
+		//do one
+		worker1 = a;
+		worker1 = worker1 >> 2;
+		one = worker1%64;
+		//do two
+		//in[1] << 4 | in[2] >> 2;
+		worker1 = a;
+		worker2 = b;
+		worker1 = worker1 << 6;
+		worker1 = worker1 >> 2;
+		worker2 = worker2 >> 4;
+		two = (worker1|worker2)%64;
+		//do three
+		//in[2] << 6 | in[3] >> 0;
+		worker1 = b;
+		worker2 = c;
+		worker1 = b << 4;
+		worker1 = worker1 >> 2;
+		worker2 = c >> 6;
+		three = (worker1|worker2)%64;
+		//do four
+		worker1 = c%64;
+		four = worker1;
+		printf("%c%c%c%c", lookup[one], lookup[two], lookup[three], lookup[four]);
+	}
+}
 
 char* getNextRootServer() {
     //TODO: Possibly use this function for any list of IP addresses to try
@@ -107,9 +150,9 @@ void sendNumBytes(void* data, int size, struct sockaddr_in* server) {
 	inet_ntop(AF_INET, (&(server->sin_addr)), ip, INET_ADDRSTRLEN);
 
     while (bytesSent < size) {
-    	fprintf(stderr, "Sending %d bytes to %s\n", size, ip);
+    	//fprintf(stderr, "Sending %d bytes to %s\n", size, ip);
     	bytesSent += sendto(sockfd, data + bytesSent, size - bytesSent, 0, (struct sockaddr*)(server), server_size);
-    	fprintf(stderr, "Sent %d bytes\n", bytesSent);
+    	//fprintf(stderr, "Sent %d bytes\n", bytesSent);
 
     	if (bytesSent < 0) {
     		fprintf(stderr, "Failed to send. %s\n", strerror(errno));
@@ -445,39 +488,19 @@ void parseRRSIG(void** dest, char* src, int bytesParsed, uint16_t len) {
 
 	s->key_tag = getUint16(src + bytesParsed);
 	bytesParsed += sizeof(uint16_t);
-	fprintf(stderr, "debugx: %u\n", bytesParsed-start+1);
-	//s->signer_name = malloc (sizeof(char) * bytesParsed-start+1);//why does this improve things? does the lower malloc fail?
-	fprintf(stderr,"TEST: %c\n", src+bytesParsed);
+
 	parseRdLabel((void**)&(s->signer_name), src, &bytesParsed, 0);
 	char temp[1024];
-	//bytesParsed += sizeof(s->signer_name);
+
 	createCharFromLabel(s->signer_name, temp);
-	fprintf(stderr, "debug1:(%d) %s\n", strlen(temp), temp);
-	fprintf(stderr, "done?", temp);
+
 	// Assume signature is remaining bytes.
 	s->signature = (char *) calloc((len - (bytesParsed - start)), sizeof(char));
-	fprintf(stderr, "start at: %p go for: %u,\n", (src+bytesParsed), (bytesParsed-start));
-	//src + bytesParsed is NOT where we want to memcpy from!!! that's the middle of a char table! 
-	//memcpy(&s->signature, (void*)(src), bytesParsed - start);//s->signature
-	fprintf(stderr, "VALUES, LEN = %u , and parsed-start =  %u\n", len, (bytesParsed-start));
-	//uint16_t *test = malloc(sizeof(char) * (len - (bytesParsed-start)+1));
-	//memcpy((void*)test, (void*)(src+bytesParsed), len-(bytesParsed-start));
-	//memcpy(s->signature, (void*)(src + bytesParsed), len - (bytesParsed - start));
+
 	int i = ((sizeof(uint32_t) * len-(bytesParsed-start))/4);
 	int k = 0;
-	fprintf(stderr, " memsize = %u , num32s = %u \n", (sizeof(char)*len-(bytesParsed-start)),i);
-	for(; k < i; k++)
-	{
-	    //fprintf(stderr," %u ->", test[k]);
-	    //ntohl(test[k]);
-	    //fprintf(stderr, " %u \n", test[k]);
-	    //we need some way to conver to chars properly....
-	}
-	//char* OUT = test;
-	//fprintf(stderr, " wuttt %s \n", OUT);
+
 	memcpy(s->signature, src + bytesParsed, len-(bytesParsed-start));
-	//Right now... memcpy(test ...) loads it up with 0s. Not okay... 
-	//test
 
 }
 
@@ -667,7 +690,7 @@ void printAAAA(char* name, char* rrType, char* class, uint16_t ttl, uint16_t rdL
 	printf("%s %u %s %s %u %s\n", name, ttl, "IN", rrType, rdLen, ip);
 }
 void printRRSig(char* name, char* rrType, char* class, uint16_t ttl, uint16_t rdLen, void* rd_data) {
-	printf("Trying to print a RRSig\n");
+	//printf("Trying to print a RRSig\n");
 	struct RR_SIG* theSig = (struct RR_SIG*) rd_data;//cast taht stuff. 
 	printf("%s %u %s %s %u ", name, ttl, "IN RRSIG", "AAAA", rdLen);
 	char TEMP[128];
@@ -676,25 +699,16 @@ void printRRSig(char* name, char* rrType, char* class, uint16_t ttl, uint16_t rd
 	int len = labelLen(theSig->signer_name);
 	int count = 0;
 	int signatureLen = rdLen - (2 + 1 + 1 + 4 + 4 + 4 + 2 + len);
-	for (; count < signatureLen; count++) {
-	    fprintf(stderr, "%c", theSig->signature[count]);
-	}
-	printf("\nEND JUNK\n");
-	//print out the sig itself...
-	//printf("%s\n", theSig->signature);
-	/*int i = strlen(theSig->signer_name);
-	char* nxt = theSig->signer_name + i;
-	for(; i<(rdLen - sizeof(struct RR_SIG)); i++){
-		fprintf(stderr,"%c", *nxt);
-		nxt++;
-	}*/
+
+	printTheSig(theSig->signature, signatureLen);
+
 	printf("\n");
 
 }
 void printRr(struct MESSAGE_RESOURCE_RECORD* rr, uint16_t count, char* title) {
     count = ntohs(count);
-    printf("%s", title);
-    printf("FOUND %u records\n", count);
+    //printf("%s", title);
+    //printf("FOUND %u records\n", count);
     int i = 0;
 
     for (;i < count; i++) {
@@ -716,6 +730,7 @@ void printRr(struct MESSAGE_RESOURCE_RECORD* rr, uint16_t count, char* title) {
         	printAAAA(name, rrType, "IN", ttl, rdLen, rd_data);
         } else if (type == MESSAGE_QTYPE_RRSIG) {
         	printRRSig(name, rrType, "IN", ttl, rdLen, rd_data);
+        	printf("\n\n");
         } else {
         	printf("%s %u %s %s %u\n", name, ttl, "IN", rrType, rdLen);
         }
@@ -774,10 +789,10 @@ int sendQuery(char* hostToResolve, char* dns_server, RR_TYPE query_type, struct 
     question->qclass = htons(MESSAGE_QCLASS_IN);
     question->qtype = htons(query_type);
 
-    fprintf(stderr, "Trying DNS server %s\n", dns_server);
+    //fprintf(stderr, "Trying DNS server %s\n", dns_server);
     //printDnsMessage(&test_message);
     sendDnsMessage(&test_message, server);
-    printf("Done sending... wait for reply!\n");
+    //printf("Done sending... wait for reply!\n");
     return 0;
 }
 
@@ -837,7 +852,6 @@ int initServer(struct sockaddr_in* server, char* dns_server) {
 int assignAnswer(struct MESSAGE_RESOURCE_RECORD* dest, struct MESSAGE_RESOURCE_RECORD* list, uint16_t listCount, RR_TYPE* query_types, int typeCount, struct MESSAGE_RESOURCE_RECORD** answer) {
 	int i = 0;
 	int hasAAAA = 0;
-	printf("Starting AA\n");//TODO remove
 	for (; i < listCount; i++) {
 		struct MESSAGE_RESOURCE_RECORD* cur = (list + i);
 		
@@ -845,14 +859,13 @@ int assignAnswer(struct MESSAGE_RESOURCE_RECORD* dest, struct MESSAGE_RESOURCE_R
 		for (; j < typeCount; j++) {
 			if (ntohs(cur->type) == query_types[j]) {
 				memcpy(dest, cur, sizeof(struct MESSAGE_RESOURCE_RECORD));
-				fprintf(stderr, "Found an answer to NS query.\n");
 				if(ntohs(cur->type) == MESSAGE_QTYPE_RRSIG)
 				{
-				    printRr(dest, 256, "TEST!!!\n");
+				    printRr(dest, 256, "\n");
 				}
 				else
 				{
-				    printRr(dest, 256, "Answer Found in AA\n");
+				    printRr(dest, 256, "\n");
 				}
 				hasAAAA=1;
 				
@@ -862,12 +875,12 @@ int assignAnswer(struct MESSAGE_RESOURCE_RECORD* dest, struct MESSAGE_RESOURCE_R
 		if (ntohs(cur->type) == MESSAGE_QTYPE_CNAME && hasAAAA==0) {
 			char cname[1024];
 			createCharFromLabel(((struct RR_CNAME*)cur->rd_data)->name, cname);
-			fprintf(stderr, "Found CNAME: %s\n", cname);
+			//fprintf(stderr, "Found CNAME: %s\n", cname);
 			return loopThroughList(cname, ROOT_IP, ROOT_COUNT, MESSAGE_QTYPE_AAAA, answer);
 		}
 
 		if (ntohs(cur->type) == MESSAGE_QTYPE_SOA && hasAAAA==0) {
-			fprintf(stderr, "Not sure what to do about the SOA yet. \n");
+			//fprintf(stderr, "Not sure what to do about the SOA yet. \n");
 			return RET_ANSWER_NOT_FOUND;
 		}
 	}
@@ -878,14 +891,14 @@ int assignAnswer(struct MESSAGE_RESOURCE_RECORD* dest, struct MESSAGE_RESOURCE_R
 }
 
 int checkAuthoritativeAnswer(struct DNS_MESSAGE* response, RR_TYPE query_type, struct MESSAGE_RESOURCE_RECORD** answer) {
-	printf("We got a definitive answer.\n");
+	//printf("We got a definitive answer.\n");
 	struct MESSAGE_HEADER_EXT ret;
 	unpackExtendedMessageHeader(&(response->header), &ret);
 	// TODO: determine if the record type being searched for was found.
 
 	// likely parsing ns records.
 	if (query_type == MESSAGE_QTYPE_A) {
-		printf("Error check1\n");
+		//printf("Error check1\n");
 		*answer = (struct MESSAGE_RESOURCE_RECORD*) malloc(sizeof(struct MESSAGE_RESOURCE_RECORD));
 		RR_TYPE types[1];
 		types[0] = MESSAGE_QTYPE_A;
@@ -893,12 +906,12 @@ int checkAuthoritativeAnswer(struct DNS_MESSAGE* response, RR_TYPE query_type, s
 
 	// likely parsing the AAAA with RRSIG
 	} else if (query_type == MESSAGE_QTYPE_AAAA) {
-		printf("Error check2\n");
+		//printf("Error check2\n");
 		*answer = (struct MESSAGE_RESOURCE_RECORD*) malloc(sizeof(struct MESSAGE_RESOURCE_RECORD) * 2);
 		RR_TYPE types[2];
 		types[0] = MESSAGE_QTYPE_AAAA;
 		types[1] = MESSAGE_QTYPE_RRSIG;
-		printDnsMessage(response);
+		//printDnsMessage(response);
 		
 		return assignAnswer(*answer, response->answer, ret.answer_count, types, 2, answer);
 	} else {
@@ -1130,11 +1143,11 @@ void strtolower(char str[]) {
 			str[i] = str[i] + 'a' - 'A';
 		}
  	}
- 	printf("Hostname entered is Lowered. \n");
+ 	//printf("Hostname entered is Lowered. \n");
  	for (i = 0; str[i] != '\0'; ++i) {
- 	printf("%c",str[i]);
+ 	//printf("%c",str[i]);
  	}
- 	printf("\n--------------------------\n");
+ 	//printf("\n--------------------------\n");
 }
 
 void testParseLabel() {
@@ -1226,7 +1239,7 @@ int main(int argc, char *argv[]) {
     if (ret == RET_FOUND_ANSWER) {
 	//	for (int i = 0; i < t.count; i++) {
 	//		if (t.answers + i)->type == MESSAGE_QTYPE_AAAA )
-    	printRr(answer, (256), "Answer Found.\n"); // fixed segfault, was print (answer, ntohl(256), blah) which tried to print way too many characters. 
+    	//printRr(answer, (256), "Answer Found.\n"); // fixed segfault, was print (answer, ntohl(256), blah) which tried to print way too many characters. 
     	
     } else if (ret == RET_NO_SUCH_NAME) {
     	printf("No AAAA records are associated with the name\n");
